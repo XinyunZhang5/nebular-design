@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000__TRACKED_VAR__)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/register -H 'Content-Type: application/json' -d '{\"username\":\"TestBuilder\",\"email\":\"test@test.com\",\"password\":\"lego123\",\"avatar\":\"🟡\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:3000/api/chat)",
+      "Bash(open *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/register -H 'Content-Type: application/json' -d '{\"username\":\"Alice\",\"email\":\"alice@test.com\",\"password\":\"test123\",\"avatar\":\"🔵\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/register -H 'Content-Type: application/json' -d '{\"username\":\"Bob\",\"email\":\"bob@test.com\",\"password\":\"test123\",\"avatar\":\"🟢\"}')",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/alice.json'\\)\\); print\\(d['user']['id']\\)\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/friends/request -H 'Content-Type: application/json' -d '{\"requesterId\":\"__TRACKED_VAR__\",\"requesterName\":\"Alice\",\"targetUsername\":\"Bob\"}')",
+      "Bash(psql --version)",
+      "Bash(brew services *)",
+      "Bash(brew install *)"
+    ]
+  }
+}

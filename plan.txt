@@ -1,0 +1,190 @@
+Nebular Design — 项目框架
+
+Requirements
+用户能上传建筑图片，系统将其转化为 3D 数据，匹配 LEGO 积木样式，生成组装步骤，并提供社交功能让用户交流互动。
+
+User Stories
+
+作为用户，我想上传建筑图片，得到对应的 LEGO 积木清单和组装步骤
+作为用户，我想看到每块积木对应 LEGO 官方商店的真实款式
+作为用户，我想在 Chat Room 里找到有共同爱好的人
+作为用户，我想加好友，和特定用户保持长期联系
+作为用户，我想看到我历史上传过的作品记录
+
+
+Acceptance Criteria
+
+上传图片后 X 秒内返回积木清单
+积木样式必须来自 LEGO 官方已有款式
+组装步骤以分步图文形式展示
+Chat Room 支持实时消息
+好友系统支持发送/接受/拒绝请求
+用户需注册登录才能使用核心功能
+
+
+Scope
+In Scope（做）
+
+图片上传 + 2D→3D 转换
+AI 积木匹配 + 组装步骤生成
+用户注册/登录/个人页
+Chat Room（公开）
+好友系统（私信）
+作品历史记录
+
+Out of Scope（暂不做）
+
+移动端 App
+LEGO 商店购买跳转
+3D 模型实时预览渲染
+多语言支持
+
+
+Wireframe / Mockup
+页面清单：
+1. 首页 Landing Page
+2. 注册/登录页
+3. 上传页（核心功能）
+   ├── 上传图片区域
+   ├── 转换进度显示
+   └── 结果展示（积木清单 + 步骤）
+4. 个人主页（作品历史）
+5. Chat Room（公开聊天）
+6. 好友列表 + 私信页
+
+Architecture
+用户浏览器
+    ↓
+Next.js 前端 (Vercel)
+    ↓ API 请求
+Python 后端 (Railway)
+    ├── 图片处理服务（2D→3D）
+    ├── AI 积木匹配服务
+    ├── 用户/好友/聊天服务
+    └── WebSocket（实时聊天）
+         ↓
+    PostgreSQL 数据库
+         +
+    AWS S3（图片存储）
+后端用 Python 是因为图像处理和 AI 调用在 Python 生态最成熟。
+
+Tech Stack
+层级技术原因前端Next.js + TailwindCSS快速开发，部署简单后端Python + FastAPIAI/图像处理生态强数据库PostgreSQL关系型，适合用户/好友/作品图片存储AWS S3大文件存储标准方案实时通信WebSocketChat Room 需要实时推送2D→3DDepthAnything / Open3D开源深度估计模型AI 积木匹配OpenAI / Claude API理解结构，匹配积木部署前端VercelNext.js 原生支持部署后端RailwayPython 服务持续运行
+
+API Design
+图片处理
+POST   /api/images/upload        上传图片
+GET    /api/images/{id}/status   查询转换进度
+GET    /api/images/{id}/result   获取积木清单+步骤
+用户系统
+POST   /api/auth/register        注册
+POST   /api/auth/login           登录
+GET    /api/users/{id}           获取用户信息
+好友系统
+POST   /api/friends/request      发送好友请求
+POST   /api/friends/accept       接受请求
+GET    /api/friends/list         好友列表
+聊天
+GET    /api/chatroom/messages    获取历史消息
+WS     /ws/chatroom              实时聊天 WebSocket
+WS     /ws/dm/{friend_id}        私信 WebSocket
+
+ERD
+User
+├── id
+├── username
+├── email
+├── avatar_url
+└── created_at
+
+Friendship
+├── id
+├── requester_id → User
+├── receiver_id  → User
+└── status (pending/accepted)
+
+Project（作品）
+├── id
+├── user_id      → User
+├── image_url
+├── result_json  （积木清单+步骤）
+└── created_at
+
+Message（Chat Room）
+├── id
+├── sender_id    → User
+├── content
+├── type (public/dm)
+├── receiver_id  → User (私信时用)
+└── created_at
+
+Schema
+sqlCREATE TABLE users (
+  id UUID PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  avatar_url TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE friendships (
+  id UUID PRIMARY KEY,
+  requester_id UUID REFERENCES users(id),
+  receiver_id UUID REFERENCES users(id),
+  status VARCHAR(20) DEFAULT 'pending'
+);
+
+CREATE TABLE projects (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(id),
+  image_url TEXT NOT NULL,
+  result_json JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE messages (
+  id UUID PRIMARY KEY,
+  sender_id UUID REFERENCES users(id),
+  receiver_id UUID REFERENCES users(id),
+  content TEXT NOT NULL,
+  type VARCHAR(10) DEFAULT 'public',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+Endpoints 完整清单
+POST   /api/auth/register
+POST   /api/auth/login
+GET    /api/users/{id}
+POST   /api/images/upload
+GET    /api/images/{id}/status
+GET    /api/images/{id}/result
+GET    /api/projects/history
+POST   /api/friends/request
+POST   /api/friends/accept
+DELETE /api/friends/{id}
+GET    /api/friends/list
+GET    /api/chatroom/messages
+WS     /ws/chatroom
+WS     /ws/dm/{friend_id}
+
+Metrics
+指标目标图片转换时间< 30 秒API 响应时间< 500ms聊天消息延迟< 1 秒系统可用性> 99%支持并发用户100人同时在线（MVP阶段）
+
+Deliverables
+MVP 第一阶段
+
+图片上传 + AI 积木清单返回
+用户注册登录
+基础 Chat Room
+
+第二阶段
+
+好友系统 + 私信
+作品历史页
+组装步骤分步展示
+
+第三阶段
+
+性能优化
+LEGO 官方款式数据库完善
+UI 精细化

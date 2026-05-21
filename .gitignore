@@ -1,0 +1,25 @@
+# Python
+backend/.venv/
+backend/venv/
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+*.egg-info/
+.env
+*.env
+
+# Node
+nebular-design/node_modules/
+node_modules/
+.next/
+nebular-design/.next/
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Misc
+*.log
+.idea/
+.vscode/
