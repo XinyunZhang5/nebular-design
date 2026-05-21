@@ -23,3 +23,9 @@ nebular-design/.next/
 *.log
 .idea/
 .vscode/
+
+# Uploads (local S3 fallback)
+backend/uploads/
+
+# Claude settings
+.claude/

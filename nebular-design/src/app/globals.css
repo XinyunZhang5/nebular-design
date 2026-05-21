@@ -1,0 +1,248 @@
+@import "tailwindcss";
+
+@theme {
+  --color-lego-yellow: #F7D117;
+  --color-lego-yellow-hover: #E6C000;
+  --color-lego-yellow-shadow: #C9A800;
+  --color-lego-red: #E3000B;
+  --color-lego-blue: #006DB7;
+  --color-lego-green: #007934;
+  --color-lego-orange: #FF6B00;
+  --color-lego-black: #1C1C1C;
+  --color-lego-dark-gray: #4A4A4A;
+  --color-lego-gray: #9A9A9A;
+  --color-lego-light-gray: #F2F2F2;
+  --color-lego-bg: #FAFAFA;
+  --color-lego-white: #FFFFFF;
+  --color-primary: #F7D117;
+  --color-primary-hover: #E6C000;
+  --font-display: var(--font-nunito);
+  --font-body: var(--font-nunito);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: #FAFAFA;
+  color: #1C1C1C;
+  font-family: var(--font-nunito), 'Nunito', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* LEGO Stud pattern background */
+.lego-stud-bg {
+  background-color: #F2F2F2;
+  background-image: radial-gradient(circle, #D8D8D8 2px, transparent 2px);
+  background-size: 28px 28px;
+}
+
+/* LEGO brick button style */
+.btn-lego {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #F7D117;
+  color: #1C1C1C;
+  font-weight: 800;
+  font-size: 15px;
+  padding: 12px 24px;
+  border: 2.5px solid #1C1C1C;
+  border-radius: 6px;
+  box-shadow: 4px 4px 0 #1C1C1C;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-decoration: none;
+  user-select: none;
+}
+
+.btn-lego:hover {
+  background: #E6C000;
+  transform: translate(1px, 1px);
+  box-shadow: 3px 3px 0 #1C1C1C;
+}
+
+.btn-lego:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0 #1C1C1C;
+}
+
+.btn-lego-dark {
+  background: #1C1C1C;
+  color: #F7D117;
+  border: 2.5px solid #1C1C1C;
+  box-shadow: 4px 4px 0 #F7D117;
+}
+
+.btn-lego-dark:hover {
+  background: #333;
+  box-shadow: 3px 3px 0 #F7D117;
+}
+
+.btn-lego-dark:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0 #F7D117;
+}
+
+.btn-lego-outline {
+  background: transparent;
+  color: #1C1C1C;
+  border: 2.5px solid #1C1C1C;
+  box-shadow: 4px 4px 0 #1C1C1C;
+}
+
+.btn-lego-outline:hover {
+  background: #F2F2F2;
+  box-shadow: 3px 3px 0 #1C1C1C;
+}
+
+/* LEGO Card */
+.lego-card {
+  background: #FFFFFF;
+  border: 2.5px solid #1C1C1C;
+  border-radius: 8px;
+  box-shadow: 6px 6px 0 #1C1C1C;
+  transition: all 0.15s ease;
+}
+
+.lego-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 #1C1C1C;
+}
+
+/* LEGO Input */
+.lego-input {
+  background: #FFFFFF;
+  border: 2.5px solid #1C1C1C;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  transition: box-shadow 0.15s ease;
+  color: #1C1C1C;
+}
+
+.lego-input:focus {
+  box-shadow: 4px 4px 0 #F7D117;
+}
+
+/* LEGO Badge */
+.lego-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: #F7D117;
+  border: 2px solid #1C1C1C;
+  border-radius: 4px;
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* LEGO Stud decorative element */
+.lego-studs-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.lego-stud {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.2);
+  background: inherit;
+  filter: brightness(1.1);
+}
+
+/* Section heading style */
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* Progress bar */
+.lego-progress {
+  background: #F2F2F2;
+  border: 2px solid #1C1C1C;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 16px;
+}
+
+.lego-progress-bar {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    #F7D117 0px,
+    #F7D117 20px,
+    #E6C000 20px,
+    #E6C000 24px
+  );
+  transition: width 0.3s ease;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F2F2F2;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1C1C1C;
+  border-radius: 4px;
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes build-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-yellow {
+  0%, 100% { box-shadow: 6px 6px 0 #1C1C1C; }
+  50% { box-shadow: 6px 6px 0 #F7D117, 0 0 20px rgba(247, 209, 23, 0.4); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-build-in {
+  animation: build-in 0.5s ease forwards;
+}
+
+.animate-pulse-yellow {
+  animation: pulse-yellow 2s ease infinite;
+}
