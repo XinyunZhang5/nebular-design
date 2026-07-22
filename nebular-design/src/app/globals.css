@@ -12,7 +12,7 @@
   --color-lego-dark-gray: #4A4A4A;
   --color-lego-gray: #9A9A9A;
   --color-lego-light-gray: #F2F2F2;
-  --color-lego-bg: #FAFAFA;
+  --color-lego-bg: #F3F2EE;
   --color-lego-white: #FFFFFF;
   --color-primary: #F7D117;
   --color-primary-hover: #E6C000;
@@ -29,10 +29,77 @@ html {
 }
 
 body {
-  background: #FAFAFA;
+  background: #F3F2EE;
   color: #1C1C1C;
   font-family: var(--font-nunito), 'Nunito', sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Editorial redesign utilities ===== */
+.display-xl {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+
+.eyebrow-min {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #A6A29A;
+}
+
+.btn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #1C1C1C;
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px 26px;
+  border-radius: 999px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), background 0.25s;
+}
+.btn-pill:hover { background: #000; transform: translateY(-2px); }
+
+.btn-pill-yellow { background: #F7D117; color: #1C1C1C; }
+.btn-pill-yellow:hover { background: #E6C000; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #1C1C1C;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: gap 0.25s cubic-bezier(0.16,1,0.3,1);
+}
+.btn-ghost:hover { gap: 13px; }
+
+.brick-shadow { filter: drop-shadow(0 34px 42px rgba(28,28,28,0.14)); }
+
+.hairline { border-color: rgba(28,28,28,0.10); }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up 0.7s cubic-bezier(0.16,1,0.3,1) both; }
+
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+.animate-drift { animation: drift 6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .animate-drift, .animate-float, .animate-build-in { animation: none; }
 }
 
 /* LEGO Stud pattern background */

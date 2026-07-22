@@ -22,9 +22,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${nunito.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
+      <body className="h-full flex flex-col overflow-hidden">
         <Navbar />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">{children}</main>
       </body>
     </html>
   );

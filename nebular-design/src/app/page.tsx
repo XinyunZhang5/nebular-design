@@ -1,311 +1,389 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
 
-const FLOATING_BRICKS = [
-  { color: '#E3000B', size: 80, x: '8%', y: '20%', delay: '0s', rotate: -15 },
-  { color: '#006DB7', size: 56, x: '85%', y: '15%', delay: '0.8s', rotate: 10 },
-  { color: '#007934', size: 64, x: '75%', y: '60%', delay: '1.6s', rotate: -8 },
-  { color: '#FF6B00', size: 48, x: '12%', y: '70%', delay: '0.4s', rotate: 20 },
-  { color: '#9B59B6', size: 52, x: '90%', y: '45%', delay: '1.2s', rotate: -5 },
-];
+/* ---------- Isometric brick with grainy-gradient skin ---------- */
 
-function LegoMiniBlock({ color, size, studs = 2 }: { color: string; size: number; studs?: number }) {
+function shade(hex: string, amt: number) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255;
+  let g = (n >> 8) & 255;
+  let b = n & 255;
+  if (amt >= 0) {
+    r += (255 - r) * amt;
+    g += (255 - g) * amt;
+    b += (255 - b) * amt;
+  } else {
+    const f = 1 + amt;
+    r *= f;
+    g *= f;
+    b *= f;
+  }
+  const h = (v: number) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+const ISO_A = Math.PI / 6;
+const ISO_COS = Math.cos(ISO_A);
+const ISO_SIN = Math.sin(ISO_A);
+const WALL = 1.15;
+const STUD_H = 0.36;
+const STUD_R = 0.33;
+
+function proj(x: number, y: number, z: number, unit: number): [number, number] {
+  return [(x - y) * ISO_COS * unit, (x + y) * ISO_SIN * unit - z * unit];
+}
+
+type BrickSpec = { ox: number; oy: number; oz: number; w: number; d: number; from: string; to: string; opacity?: number };
+
+function BrickBody({ spec, unit, gid, grainId }: { spec: BrickSpec; unit: number; gid: string; grainId: string }) {
+  const { ox, oy, oz, w, d, from, to, opacity = 0.98 } = spec;
+  const P = (x: number, y: number, z: number): [number, number] => proj(ox + x, oy + y, oz + z, unit);
+
+  const c0 = P(0, 0, WALL);
+  const c1 = P(w, 0, WALL);
+  const c2 = P(w, d, WALL);
+  const c3 = P(0, d, WALL);
+  const top = [c0, c1, c2, c3];
+  const right = [P(w, 0, WALL), P(w, d, WALL), P(w, d, 0), P(w, 0, 0)];
+  const left = [P(0, d, WALL), P(w, d, WALL), P(w, d, 0), P(0, d, 0)];
+
+  const rx = STUD_R * Math.SQRT2 * ISO_COS * unit;
+  const ry = STUD_R * Math.SQRT2 * ISO_SIN * unit;
+  const studs: { bx: number; by: number; tx: number; ty: number }[] = [];
+  for (let i = 0; i < w; i++) {
+    for (let j = 0; j < d; j++) {
+      const b = P(i + 0.5, j + 0.5, WALL);
+      const t = P(i + 0.5, j + 0.5, WALL + STUD_H);
+      studs.push({ bx: b[0], by: b[1], tx: t[0], ty: t[1] });
+    }
+  }
+
+  const facePts = [...top, ...right, ...left];
+  const fxs = facePts.map((p) => p[0]);
+  const fys = facePts.map((p) => p[1]);
+  const bx0 = Math.min(...fxs);
+  const by0 = Math.min(...fys) - ry * 1.6;
+  const bw = Math.max(...fxs) - bx0;
+  const bh = Math.max(...fys) - by0 + ry;
+
+  const leftFrom = shade(from, -0.16);
+  const leftTo = shade(to, -0.16);
+  const rightFrom = shade(from, -0.31);
+  const rightTo = shade(to, -0.31);
+  const discFrom = shade(from, 0.16);
+  const discTo = shade(to, 0.06);
+  const wallFrom = shade(from, -0.25);
+  const wallTo = shade(to, -0.25);
+  const ao = shade(to, -0.4);
+
+  const pts = (a: [number, number][]) => a.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const g = gid;
+  const grainRect = (
+    <rect
+      x={bx0.toFixed(1)}
+      y={by0.toFixed(1)}
+      width={bw.toFixed(1)}
+      height={bh.toFixed(1)}
+      filter={`url(#${grainId})`}
+      opacity="0.5"
+      style={{ mixBlendMode: 'overlay' }}
+    />
+  );
+
   return (
-    <div
-      className="relative"
-      style={{
-        width: size,
-        height: size * 0.625,
-        background: color,
-        borderRadius: 5,
-        border: '2.5px solid rgba(0,0,0,0.35)',
-        boxShadow: `3px 3px 0 rgba(0,0,0,0.35), inset 0 -4px 0 rgba(0,0,0,0.15)`,
-      }}
-    >
-      {/* Studs */}
-      <div className="absolute -top-[9px] left-0 right-0 flex justify-evenly">
-        {Array.from({ length: studs }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              width: size * 0.28,
-              height: size * 0.28,
-              background: color,
-              borderRadius: '50%',
-              border: '2px solid rgba(0,0,0,0.3)',
-              boxShadow: `inset 0 -2px 3px rgba(0,0,0,0.2)`,
-            }}
-          />
+    <g opacity={opacity}>
+      <defs>
+        <linearGradient id={`${g}-top`} gradientUnits="userSpaceOnUse" x1={c0[0].toFixed(1)} y1={c0[1].toFixed(1)} x2={c2[0].toFixed(1)} y2={c2[1].toFixed(1)}>
+          <stop offset="0" stopColor={from} />
+          <stop offset="1" stopColor={to} />
+        </linearGradient>
+        <linearGradient id={`${g}-left`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={leftFrom} />
+          <stop offset="1" stopColor={leftTo} />
+        </linearGradient>
+        <linearGradient id={`${g}-right`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={rightFrom} />
+          <stop offset="1" stopColor={rightTo} />
+        </linearGradient>
+        <linearGradient id={`${g}-disc`} x1="0.2" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stopColor={discFrom} />
+          <stop offset="1" stopColor={discTo} />
+        </linearGradient>
+        <linearGradient id={`${g}-wall`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={wallFrom} />
+          <stop offset="1" stopColor={wallTo} />
+        </linearGradient>
+        <clipPath id={`${g}-ct`}>
+          <polygon points={pts(top)} />
+        </clipPath>
+        <clipPath id={`${g}-cl`}>
+          <polygon points={pts(left)} />
+        </clipPath>
+        <clipPath id={`${g}-cr`}>
+          <polygon points={pts(right)} />
+        </clipPath>
+      </defs>
+
+      <g clipPath={`url(#${g}-cr)`} style={{ isolation: 'isolate' }}>
+        <polygon points={pts(right)} fill={`url(#${g}-right)`} />
+        {grainRect}
+      </g>
+
+      <g clipPath={`url(#${g}-cl)`} style={{ isolation: 'isolate' }}>
+        <polygon points={pts(left)} fill={`url(#${g}-left)`} />
+        {grainRect}
+      </g>
+
+      <g clipPath={`url(#${g}-ct)`} style={{ isolation: 'isolate' }}>
+        <polygon points={pts(top)} fill={`url(#${g}-top)`} />
+        {studs.map((s, i) => (
+          <ellipse key={i} cx={s.bx.toFixed(1)} cy={s.by.toFixed(1)} rx={(rx * 1.5).toFixed(1)} ry={(ry * 1.5).toFixed(1)} fill={ao} opacity="0.3" style={{ mixBlendMode: 'multiply' }} />
         ))}
-      </div>
-    </div>
+        {grainRect}
+      </g>
+
+      {studs.map((s, i) => (
+        <g key={i}>
+          <path
+            d={`M ${(s.tx - rx).toFixed(1)} ${s.ty.toFixed(1)} L ${(s.bx - rx).toFixed(1)} ${s.by.toFixed(1)} A ${rx.toFixed(1)} ${ry.toFixed(1)} 0 0 0 ${(s.bx + rx).toFixed(1)} ${s.by.toFixed(1)} L ${(s.tx + rx).toFixed(1)} ${s.ty.toFixed(1)} Z`}
+            fill={`url(#${g}-wall)`}
+          />
+          <ellipse cx={s.tx.toFixed(1)} cy={s.ty.toFixed(1)} rx={rx.toFixed(1)} ry={ry.toFixed(1)} fill={`url(#${g}-disc)`} />
+        </g>
+      ))}
+    </g>
   );
 }
 
+function brickExtent(spec: BrickSpec, unit: number): [number, number][] {
+  const { ox, oy, oz, w, d } = spec;
+  const pts: [number, number][] = [];
+  for (const z of [oz, oz + WALL + STUD_H]) {
+    for (const x of [ox, ox + w]) {
+      for (const y of [oy, oy + d]) {
+        pts.push(proj(x, y, z, unit));
+      }
+    }
+  }
+  return pts;
+}
+
+function BrickStack({
+  bricks,
+  unit = 60,
+  ns,
+  className = '',
+  style,
+}: {
+  bricks: BrickSpec[];
+  unit?: number;
+  ns: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const order = bricks
+    .map((b, i) => ({ b, i }))
+    .sort((a, z) => a.b.oz - z.b.oz || a.b.ox + a.b.oy - (z.b.ox + z.b.oy));
+  const allPts = bricks.flatMap((b) => brickExtent(b, unit));
+  const xs = allPts.map((p) => p[0]);
+  const ys = allPts.map((p) => p[1]);
+  const pad = unit * 0.65;
+  const minX = Math.min(...xs) - pad;
+  const minY = Math.min(...ys) - pad;
+  const vbW = Math.max(...xs) - minX + pad;
+  const vbH = Math.max(...ys) - minY + pad;
+  const grainId = `grain-${ns}`;
+  return (
+    <svg
+      className={className}
+      style={style}
+      viewBox={`${minX.toFixed(1)} ${minY.toFixed(1)} ${vbW.toFixed(1)} ${vbH.toFixed(1)}`}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <filter id={grainId} x="0%" y="0%" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" result="n" />
+          <feColorMatrix in="n" type="saturate" values="0" />
+        </filter>
+      </defs>
+      {order.map(({ b, i }) => (
+        <BrickBody key={i} spec={b} unit={unit} gid={`${ns}-${i}`} grainId={grainId} />
+      ))}
+    </svg>
+  );
+}
+
+/* ---------- content ---------- */
+
+const G = {
+  yellow: { from: '#FCE181', to: '#F6C846' },
+  coral: { from: '#FBC0A6', to: '#F89A93' },
+  sky: { from: '#B4DEF3', to: '#84C6EC' },
+  lilac: { from: '#D3CEF5', to: '#B4ABE8' },
+};
+
+const HERO_BRICKS: BrickSpec[] = [
+  { ox: 0, oy: 0, oz: 0, w: 4, d: 2, ...G.lilac },
+  { ox: 0, oy: 0.5, oz: WALL, w: 2, d: 1, ...G.sky },
+  { ox: 2, oy: 0.5, oz: WALL, w: 2, d: 1, ...G.coral },
+  { ox: 1, oy: 0.5, oz: WALL * 2, w: 2, d: 1, ...G.yellow },
+];
+
 const STEPS = [
-  {
-    number: '01',
-    title: 'Upload Your Photo',
-    description: 'Take a photo of any building, structure, or design. Drag it in or browse your files.',
-    color: '#E3000B',
-    icon: '📸',
-  },
-  {
-    number: '02',
-    title: 'AI Analyzes & Matches',
-    description: 'Our AI engine breaks down the geometry and matches every part to real LEGO brick types.',
-    color: '#006DB7',
-    icon: '🧠',
-  },
-  {
-    number: '03',
-    title: 'Build Step by Step',
-    description: 'Get your full brick list plus clear assembly instructions. Start building!',
-    color: '#007934',
-    icon: '🏗️',
-  },
+  { title: 'Photograph it', description: 'Snap any building or structure, or drop in a photo you already have.', g: G.yellow },
+  { title: 'AI maps the bricks', description: 'The engine reads the geometry and matches every part to a real LEGO piece.', g: G.sky },
+  { title: 'Build it for real', description: 'Get the full parts list plus step-by-step instructions, then start clicking bricks.', g: G.coral },
 ];
 
 const GALLERY = [
-  { title: 'Empire State Building', pieces: 847, difficulty: 'Expert', color: '#E3000B', emoji: '🏙️' },
-  { title: 'Sydney Opera House', pieces: 623, difficulty: 'Hard', color: '#006DB7', emoji: '🏛️' },
-  { title: 'Eiffel Tower', pieces: 412, difficulty: 'Medium', color: '#007934', emoji: '🗼' },
-  { title: 'Big Ben', pieces: 534, difficulty: 'Hard', color: '#FF6B00', emoji: '🕰️' },
+  { title: 'Empire State Building', pieces: 847, difficulty: 'Expert', seed: 'empire-state-skyscraper-newyork' },
+  { title: 'Sydney Opera House', pieces: 623, difficulty: 'Hard', seed: 'sydney-opera-house-harbour' },
+  { title: 'Eiffel Tower', pieces: 412, difficulty: 'Medium', seed: 'eiffel-tower-paris-sky' },
+  { title: 'Big Ben', pieces: 534, difficulty: 'Hard', seed: 'big-ben-london-clocktower' },
 ];
 
 export default function HomePage() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   return (
     <div className="bg-lego-bg">
       {/* HERO */}
-      <section className="relative overflow-hidden lego-stud-bg min-h-[80vh] flex items-center">
-        {/* Floating bricks — only render after mount to avoid hydration mismatch */}
-        {mounted && FLOATING_BRICKS.map((b, i) => (
-          <div
-            key={i}
-            className="absolute hidden lg:block pointer-events-none"
-            style={{
-              left: b.x,
-              top: b.y,
-              transform: `rotate(${b.rotate}deg)`,
-              animation: `float 4s ease-in-out ${b.delay} infinite`,
-              opacity: 0.85,
-            }}
-          >
-            <LegoMiniBlock color={b.color} size={b.size} studs={b.size > 60 ? 4 : 2} />
-          </div>
-        ))}
-
-        <div className="relative z-10 max-w-6xl mx-auto px-6 py-20 text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 lego-badge mb-8">
-            <span>🧱</span>
-            <span>AI-Powered LEGO Creator</span>
-          </div>
-
-          {/* Headline */}
-          <h1
-            className="font-black text-lego-black mb-6 leading-none"
-            style={{ fontSize: 'clamp(2.8rem, 7vw, 5.5rem)', letterSpacing: '-0.03em' }}
-          >
-            Turn Any Building
-            <br />
-            <span
-              className="relative inline-block px-3 py-1 mx-2"
-              style={{
-                background: '#F7D117',
-                border: '3px solid #1C1C1C',
-                boxShadow: '6px 6px 0 #1C1C1C',
-              }}
-            >
-              Into LEGO
-            </span>
-            <br />
-            Masterpiece
-          </h1>
-
-          <p className="text-lego-dark-gray text-xl font-semibold max-w-xl mx-auto mb-10">
-            Upload a photo. Our AI breaks it into real LEGO bricks.<br className="hidden sm:block" />
-            Get the piece list and start building.
-          </p>
-
-          {/* CTAs */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/upload" className="btn-lego text-base px-8 py-4">
-              🚀 Start Building
-            </Link>
-            <Link href="/chat" className="btn-lego-outline text-base px-8 py-4">
-              💬 Join Community
-            </Link>
+      <section className="relative overflow-hidden">
+        <div className="max-w-6xl mx-auto px-6 min-h-[calc(100dvh-4rem)] grid lg:grid-cols-[1fr_1.05fr] gap-8 items-center">
+          <div className="animate-fade-up py-14 lg:py-0 order-2 lg:order-1">
+            <div className="eyebrow-min mb-6">AI LEGO studio</div>
+            <h1 className="display-xl text-lego-black mb-7" style={{ fontSize: 'clamp(2.7rem, 5.6vw, 4.6rem)' }}>
+              Any building,
+              <br />
+              rebuilt in bricks.
+            </h1>
+            <p className="text-lego-dark-gray text-lg font-medium max-w-md mb-10 leading-relaxed">
+              Photograph a structure. Our AI rebuilds it from real LEGO parts and hands you the blueprint.
+            </p>
+            <div className="flex flex-wrap items-center gap-x-7 gap-y-4">
+              <Link href="/upload" className="btn-pill">
+                Start building
+                <ArrowRight size={18} strokeWidth={2.4} />
+              </Link>
+              <Link href="/chat" className="btn-ghost">
+                Explore community
+                <ArrowUpRight size={16} strokeWidth={2.4} />
+              </Link>
+            </div>
           </div>
 
-          {/* Stats */}
-          <div className="flex flex-wrap justify-center gap-8 mt-16">
-            {[
-              { label: 'Builds Created', value: '2,400+' },
-              { label: 'LEGO Parts in DB', value: '15,000+' },
-              { label: 'Builders Online', value: '320' },
-            ].map(({ label, value }) => (
-              <div key={label} className="lego-card px-6 py-4 text-center" style={{ minWidth: 130 }}>
-                <div className="font-black text-2xl text-lego-black">{value}</div>
-                <div className="text-sm font-semibold text-lego-dark-gray mt-0.5">{label}</div>
-              </div>
-            ))}
+          <div className="relative h-[340px] sm:h-[440px] lg:h-[560px] order-1 lg:order-2 flex items-center justify-center">
+            <BrickStack ns="hero" bricks={HERO_BRICKS} unit={62} className="brick-shadow animate-drift w-[92%] max-w-[560px] h-auto" />
           </div>
         </div>
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="max-w-6xl mx-auto px-6 py-20">
-        <div className="text-center mb-14">
-          <span className="lego-badge mb-4">How It Works</span>
-          <h2 className="section-title mt-4">
-            Three Steps to Your<br />LEGO Dream Build
+      <section id="how" className="max-w-6xl mx-auto px-6 py-28">
+        <div className="max-w-xl mb-16">
+          <h2 className="display-xl text-lego-black" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
+            From a photo to
+            <br />
+            a finished build.
           </h2>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-3 gap-x-10 gap-y-14">
           {STEPS.map((step, i) => (
-            <div
-              key={i}
-              className="lego-card p-6 relative group"
-              style={{ '--card-accent': step.color } as React.CSSProperties}
-            >
-              {/* Step number */}
-              <div
-                className="w-12 h-12 rounded-md flex items-center justify-center font-black text-white text-lg mb-4 border-2 border-lego-black"
-                style={{ background: step.color, boxShadow: '3px 3px 0 #1C1C1C' }}
-              >
-                {step.number}
-              </div>
-
-              {/* Icon */}
-              <div className="text-4xl mb-3">{step.icon}</div>
-
-              <h3 className="font-black text-xl text-lego-black mb-2">{step.title}</h3>
-              <p className="text-lego-dark-gray font-semibold leading-relaxed">{step.description}</p>
-
-              {/* Connector dot */}
-              {i < STEPS.length - 1 && (
-                <div className="hidden md:block absolute -right-5 top-1/2 -translate-y-1/2 z-10">
-                  <div className="w-8 h-8 rounded-full bg-lego-yellow border-2 border-lego-black flex items-center justify-center font-black text-xs">
-                    →
-                  </div>
-                </div>
-              )}
+            <div key={i} className="animate-fade-up" style={{ animationDelay: `${i * 0.08}s` }}>
+              <BrickStack
+                ns={`step${i}`}
+                bricks={[{ ox: 0, oy: 0, oz: 0, w: 2, d: 1, ...step.g }]}
+                unit={38}
+                className="w-20 h-auto mb-7 brick-shadow"
+              />
+              <div className="text-sm font-bold text-lego-gray mb-2">0{i + 1}</div>
+              <h3 className="font-extrabold text-xl text-lego-black mb-2.5">{step.title}</h3>
+              <p className="text-lego-dark-gray font-medium leading-relaxed">{step.description}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* GALLERY PREVIEW */}
-      <section className="lego-stud-bg py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <span className="lego-badge mb-4">Featured Builds</span>
-            <h2 className="section-title mt-4">
-              See What Others<br />Are Building
-            </h2>
-          </div>
+      {/* GALLERY */}
+      <section className="max-w-6xl mx-auto px-6 py-24 border-t hairline">
+        <div className="mb-14 max-w-xl">
+          <h2 className="display-xl text-lego-black" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
+            See what others
+            <br />
+            are building.
+          </h2>
+        </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {GALLERY.map((item, i) => (
-              <div key={i} className="lego-card overflow-hidden cursor-pointer group">
-                {/* Image placeholder */}
-                <div
-                  className="h-40 flex items-center justify-center relative"
-                  style={{ background: `${item.color}22`, borderBottom: '2.5px solid #1C1C1C' }}
-                >
-                  <span className="text-6xl">{item.emoji}</span>
-                  <div className="absolute top-2 right-2">
-                    <span
-                      className="lego-badge"
-                      style={{
-                        background: item.color,
-                        color: '#fff',
-                        borderColor: '#1C1C1C',
-                        fontSize: 11,
-                        padding: '2px 8px',
-                      }}
-                    >
-                      {item.difficulty}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <h4 className="font-black text-lego-black">{item.title}</h4>
-                  <p className="text-lego-dark-gray text-sm font-semibold mt-1">
-                    🧱 {item.pieces} pieces
-                  </p>
-                </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+          {GALLERY.map((item, i) => (
+            <div key={i} className="group">
+              <div
+                className="relative rounded-2xl overflow-hidden aspect-[4/5] mb-3.5"
+                style={{ boxShadow: '0 22px 34px rgba(28,28,28,0.09)' }}
+              >
+                <img
+                  src={`https://picsum.photos/seed/${item.seed}/600/750`}
+                  alt={item.title}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <span className="absolute top-3 left-3 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/90 backdrop-blur text-lego-black">
+                  {item.difficulty}
+                </span>
               </div>
-            ))}
-          </div>
-
-          <div className="text-center mt-10">
-            <Link href="/upload" className="btn-lego text-base px-8 py-4">
-              🧱 Create Your Own Build →
-            </Link>
-          </div>
+              <h4 className="font-bold text-lego-black">{item.title}</h4>
+              <p className="text-sm text-lego-gray font-medium mt-0.5">{item.pieces} pieces</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* COMMUNITY CTA */}
-      <section className="max-w-6xl mx-auto px-6 py-20">
-        <div
-          className="rounded-xl p-10 md:p-16 text-center relative overflow-hidden border-[3px] border-lego-black"
-          style={{
-            background: '#1C1C1C',
-            boxShadow: '8px 8px 0 #F7D117',
-          }}
-        >
-          {/* Background studs */}
-          <div className="absolute inset-0 opacity-5 pointer-events-none"
-            style={{
-              backgroundImage: 'radial-gradient(circle, white 2px, transparent 2px)',
-              backgroundSize: '28px 28px',
-            }}
-          />
-
-          <div className="relative z-10">
-            <span className="lego-badge mb-6 inline-flex">👥 Community</span>
-            <h2 className="section-title text-lego-yellow mb-4">
-              Find Your Fellow<br />Brick Builders
+      {/* COMMUNITY */}
+      <section className="max-w-6xl mx-auto px-6 py-16">
+        <div className="relative overflow-hidden rounded-[32px] bg-lego-black px-8 md:px-16 py-16 md:py-24">
+          <div className="relative z-10 max-w-lg">
+            <h2 className="display-xl text-white mb-5" style={{ fontSize: 'clamp(1.9rem, 3.6vw, 2.8rem)' }}>
+              Find your fellow
+              <br />
+              brick builders.
             </h2>
-            <p className="text-lego-gray text-lg font-semibold max-w-lg mx-auto mb-8">
-              Chat in real-time, share your builds, make friends who love LEGO as much as you do.
+            <p className="text-white/55 text-lg font-medium mb-9 leading-relaxed">
+              Chat in real time, share your builds, and meet people who love LEGO as much as you do.
             </p>
-            <Link href="/chat" className="btn-lego text-base px-10 py-4">
-              💬 Open Chat Room
+            <Link href="/chat" className="btn-pill btn-pill-yellow">
+              Open chat room
+              <ArrowRight size={18} strokeWidth={2.4} />
             </Link>
           </div>
+          <BrickStack
+            ns="cta"
+            bricks={[
+              { ox: 0, oy: 0, oz: 0, w: 3, d: 2, ...G.sky },
+              { ox: 0.5, oy: 0.5, oz: WALL, w: 2, d: 1, ...G.yellow },
+            ]}
+            unit={52}
+            className="hidden md:block absolute right-4 lg:right-14 bottom-[-10%] w-[40%] max-w-[340px] h-auto animate-drift"
+          />
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t-[3px] border-lego-black bg-lego-yellow">
-        <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-lego-black rounded flex items-center justify-center border-2 border-lego-black">
-              <span className="text-lego-yellow font-black text-sm">N</span>
-            </div>
-            <span className="font-black text-lego-black">NEBULAR DESIGN</span>
-          </div>
-          <p className="text-lego-black font-semibold text-sm">
-            Built with ❤️ for LEGO enthusiasts everywhere
-          </p>
-          <div className="flex gap-4">
-            <Link href="/upload" className="text-lego-black font-bold text-sm hover:underline">Build</Link>
-            <Link href="/chat" className="text-lego-black font-bold text-sm hover:underline">Community</Link>
-            <Link href="/register" className="text-lego-black font-bold text-sm hover:underline">Sign Up</Link>
-          </div>
+      <footer className="max-w-6xl mx-auto px-6 py-12 border-t hairline flex flex-col sm:flex-row justify-between items-center gap-5">
+        <div className="flex items-center gap-2.5">
+          <span
+            className="w-7 h-7 rounded-[7px] bg-lego-yellow flex items-center justify-center"
+            style={{ boxShadow: 'inset 0 -3px 0 rgba(0,0,0,0.14)' }}
+          >
+            <span className="font-black text-sm text-lego-black leading-none">N</span>
+          </span>
+          <span className="font-extrabold text-lego-black">nebular</span>
+        </div>
+        <p className="text-sm text-lego-gray font-medium">Built for LEGO enthusiasts everywhere</p>
+        <div className="flex gap-6 text-sm font-semibold text-lego-black/50">
+          <Link href="/upload" className="hover:text-lego-black transition-colors">Build</Link>
+          <Link href="/chat" className="hover:text-lego-black transition-colors">Community</Link>
+          <Link href="/register" className="hover:text-lego-black transition-colors">Sign up</Link>
         </div>
       </footer>
     </div>
