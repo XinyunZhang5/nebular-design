@@ -4,10 +4,41 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, UserOut, Project, FriendshipOut } from '@/lib/api';
+import { BrickStack, G, WALL } from '@/components/Bricks';
+import {
+  Plus, Boxes, Users, UserPlus, MessageCircle, Trash2, X, Clock,
+  Check, Loader2, Building2, Inbox, Send,
+} from 'lucide-react';
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   Beginner: '#007934', Intermediate: '#FF6B00', Expert: '#E3000B',
+  Medium: '#FF6B00', Hard: '#E3000B',
 };
+
+function hexToRgba(hex: string, a: number) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+function DifficultyBadge({ level, className = '' }: { level: string; className?: string }) {
+  const c = DIFFICULTY_COLORS[level] || '#4A4A4A';
+  return (
+    <span className={`badge-soft ${className}`} style={{ background: hexToRgba(c, 0.14), color: c }}>
+      {level}
+    </span>
+  );
+}
+
+function Avatar({ emoji, size = 40, radius = 14 }: { emoji: string; size?: number; radius?: number }) {
+  return (
+    <span
+      className="flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.5, borderRadius: radius, background: 'rgba(247,209,23,0.24)' }}
+    >
+      {emoji}
+    </span>
+  );
+}
 
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -44,12 +75,12 @@ export default function ProfilePage() {
     setAddStatus('');
     try {
       await api.friends.request(addTarget.trim());
-      setAddStatus('✅ 好友请求已发送！');
+      setAddStatus('ok:好友请求已发送！');
       setAddTarget('');
       const f = await api.friends.list();
       setFriendships(f);
     } catch (err) {
-      setAddStatus(`⚠️ ${err instanceof Error ? err.message : '发送失败'}`);
+      setAddStatus(`err:${err instanceof Error ? err.message : '发送失败'}`);
     }
   };
 
@@ -72,62 +103,71 @@ export default function ProfilePage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
   if (!user) return (
-    <div className="min-h-screen flex items-center justify-center lego-stud-bg">
-      <div className="lego-card p-8 text-center">
-        <div className="text-4xl mb-3">⏳</div>
-        <p className="font-black text-lego-black">Loading...</p>
+    <div className="flex-1 flex items-center justify-center bg-lego-bg">
+      <div className="card-soft px-10 py-8 text-center">
+        <Loader2 size={28} className="animate-spin mx-auto mb-3 text-lego-black" />
+        <p className="font-bold text-lego-black">Loading…</p>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-lego-bg">
-      <div className="lego-stud-bg border-b-[3px] border-lego-black py-8 px-4">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <div className="w-20 h-20 rounded-xl border-[3px] border-lego-black flex items-center justify-center text-4xl"
-            style={{ background: '#F7D117', boxShadow: '5px 5px 0 #1C1C1C' }}>
+    <div className="bg-lego-bg">
+      {/* Header */}
+      <div className="border-b hairline">
+        <div className="max-w-5xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl brick-shadow"
+            style={{ background: 'rgba(247,209,23,0.9)' }}>
             {user.avatar}
           </div>
           <div className="flex-1">
-            <h1 className="font-black text-3xl text-lego-black">{user.username}</h1>
-            <p className="text-lego-dark-gray font-semibold">{user.email}</p>
-            <div className="flex flex-wrap gap-2 mt-3">
-              <span className="lego-badge">🧱 {projects.length} builds</span>
-              <span className="lego-badge" style={{ background: '#006DB7', color: 'white' }}>
-                👥 {accepted.length} friends
-              </span>
+            <div className="eyebrow-min mb-1.5">Profile</div>
+            <h1 className="font-extrabold text-3xl text-lego-black tracking-tight">{user.username}</h1>
+            <p className="text-lego-dark-gray font-medium mt-0.5">{user.email}</p>
+            <div className="flex flex-wrap gap-2 mt-3.5">
+              <span className="badge-soft"><Boxes size={14} strokeWidth={2.2} /> {projects.length} builds</span>
+              <span className="badge-soft"><Users size={14} strokeWidth={2.2} /> {accepted.length} friends</span>
             </div>
           </div>
-          <Link href="/upload" className="btn-lego">+ New Build</Link>
+          <Link href="/upload" className="btn-pill btn-pill-sm">
+            <Plus size={16} strokeWidth={2.6} /> New build
+          </Link>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex border-b-[3px] border-lego-black mb-8">
-          {(['builds', 'friends'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className="px-6 py-3 font-black text-sm capitalize rounded-t-md -mb-[3px] border-t-2 border-x-2"
-              style={{
-                borderColor: '#1C1C1C', background: activeTab === tab ? '#F7D117' : '#F2F2F2',
-                borderBottomColor: activeTab === tab ? '#F7D117' : '#1C1C1C',
-              }}>
-              {tab === 'builds'
-                ? `🏗️ My Builds (${projects.length})`
-                : `👥 Friends (${accepted.length}${pendingReceived.length > 0 ? ` · ${pendingReceived.length} new` : ''})`}
-            </button>
-          ))}
+      <div className="max-w-5xl mx-auto px-6 py-10">
+        {/* Tabs */}
+        <div className="flex items-center gap-7 border-b hairline mb-8">
+          <button onClick={() => setActiveTab('builds')} data-active={activeTab === 'builds'} className="tab-underline">
+            My builds ({projects.length})
+          </button>
+          <button onClick={() => setActiveTab('friends')} data-active={activeTab === 'friends'} className="tab-underline">
+            Friends ({accepted.length}{pendingReceived.length > 0 ? ` · ${pendingReceived.length} new` : ''})
+          </button>
         </div>
 
         {/* BUILDS */}
         {activeTab === 'builds' && (
           loading ? (
-            <div className="text-center py-12 font-black text-lego-dark-gray">Loading builds...</div>
+            <div className="text-center py-16 font-semibold text-lego-gray inline-flex items-center gap-2 w-full justify-center">
+              <Loader2 size={18} className="animate-spin" /> Loading builds…
+            </div>
           ) : projects.length === 0 ? (
-            <div className="lego-card p-12 text-center">
-              <div className="text-5xl mb-4">🏗️</div>
-              <h3 className="font-black text-xl text-lego-black mb-2">还没有作品</h3>
-              <p className="text-lego-dark-gray font-semibold mb-6">上传你的第一张建筑照片吧！</p>
-              <Link href="/upload" className="btn-lego">📸 去上传</Link>
+            <div className="card-soft px-8 py-16 text-center max-w-md mx-auto">
+              <BrickStack
+                ns="empty-builds"
+                bricks={[
+                  { ox: 0, oy: 0, oz: 0, w: 3, d: 2, ...G.sky },
+                  { ox: 0.5, oy: 0.5, oz: WALL, w: 2, d: 1, ...G.coral },
+                ]}
+                unit={28}
+                className="w-28 h-auto mx-auto mb-6 brick-shadow"
+              />
+              <h3 className="font-extrabold text-xl text-lego-black mb-2">No builds yet</h3>
+              <p className="text-lego-dark-gray font-medium mb-7">上传你的第一张建筑照片，开始搭建吧。</p>
+              <Link href="/upload" className="btn-pill btn-pill-sm mx-auto w-fit">
+                <Plus size={16} strokeWidth={2.6} /> Start a build
+              </Link>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -136,31 +176,27 @@ export default function ProfilePage() {
                   ? `${API_URL}${p.image_url}` : p.image_url;
                 const result = p.result_json;
                 return (
-                  <div key={p.id} className="lego-card overflow-hidden cursor-pointer"
+                  <div key={p.id} className="card-soft card-hover overflow-hidden cursor-pointer"
                     onClick={() => setSelectedProject(p)}>
-                    <div className="h-36 bg-lego-light-gray border-b-2 border-lego-black overflow-hidden">
+                    <div className="h-40 bg-lego-light-gray overflow-hidden">
                       {imgSrc
                         ? <img src={imgSrc} alt={result?.buildingName || ''} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center text-4xl">🏛️</div>}
+                        : <div className="w-full h-full flex items-center justify-center text-lego-gray"><Building2 size={32} /></div>}
                     </div>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-black text-lego-black text-sm leading-tight">
-                          {result?.buildingName || 'Unnamed Build'}
+                        <h4 className="font-extrabold text-lego-black leading-tight">
+                          {result?.buildingName || 'Unnamed build'}
                         </h4>
-                        {result?.difficulty && (
-                          <span className="lego-badge text-white flex-shrink-0"
-                            style={{ background: DIFFICULTY_COLORS[result.difficulty] || '#888', fontSize: 10, padding: '2px 6px' }}>
-                            {result.difficulty}
-                          </span>
-                        )}
+                        {result?.difficulty && <DifficultyBadge level={result.difficulty} className="flex-shrink-0 !text-[11px] !px-2.5 !py-1" />}
                       </div>
                       {result && (
-                        <p className="text-lego-dark-gray text-xs font-semibold mt-1">
-                          🧱 {result.estimatedPieceCount} pieces · ⏱️ {result.estimatedTime}
+                        <p className="text-lego-dark-gray text-xs font-semibold mt-2 inline-flex items-center gap-3">
+                          <span className="inline-flex items-center gap-1"><Boxes size={13} strokeWidth={2.2} /> {result.estimatedPieceCount}</span>
+                          <span className="inline-flex items-center gap-1"><Clock size={13} strokeWidth={2.2} /> {result.estimatedTime}</span>
                         </p>
                       )}
-                      <p className="text-lego-gray text-xs font-semibold mt-1">{timeAgo(p.created_at)}</p>
+                      <p className="text-lego-gray text-xs font-medium mt-1.5">{timeAgo(p.created_at)}</p>
                     </div>
                   </div>
                 );
@@ -171,69 +207,51 @@ export default function ProfilePage() {
 
         {/* FRIENDS */}
         {activeTab === 'friends' && (
-          <div className="space-y-6">
-            <div className="lego-card p-5">
-              <h3 className="font-black text-lego-black mb-3">➕ 添加好友</h3>
+          <div className="space-y-6 max-w-2xl">
+            {/* Add friend */}
+            <div className="card-soft p-6">
+              <h3 className="font-extrabold text-lego-black mb-3.5 inline-flex items-center gap-2">
+                <UserPlus size={18} strokeWidth={2.2} /> Add a friend
+              </h3>
               <div className="flex gap-3">
                 <input type="text" value={addTarget} onChange={e => setAddTarget(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && sendRequest()}
-                  placeholder="输入用户名..." className="lego-input flex-1" />
-                <button onClick={sendRequest} className="btn-lego flex-shrink-0">发送请求</button>
+                  placeholder="输入用户名…" className="input-soft flex-1" />
+                <button onClick={sendRequest} className="btn-pill btn-pill-sm flex-shrink-0">
+                  <Send size={15} strokeWidth={2.4} /> Send
+                </button>
               </div>
               {addStatus && (
-                <p className="mt-2 text-sm font-bold"
-                  style={{ color: addStatus.startsWith('✅') ? '#007934' : '#E3000B' }}>
-                  {addStatus}
+                <p className="mt-3 text-sm font-semibold inline-flex items-center gap-1.5"
+                  style={{ color: addStatus.startsWith('ok:') ? '#007934' : '#E3000B' }}>
+                  {addStatus.startsWith('ok:') ? <Check size={14} strokeWidth={3} /> : null}
+                  {addStatus.slice(addStatus.indexOf(':') + 1)}
                 </p>
               )}
             </div>
 
+            {/* Pending received */}
             {pendingReceived.length > 0 && (
-              <div className="lego-card p-5">
-                <h3 className="font-black text-lego-black mb-4">📬 待接受的请求 ({pendingReceived.length})</h3>
-                <div className="space-y-3">
-                  {pendingReceived.map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-md bg-lego-yellow/20 border-2 border-lego-yellow">
-                      <div className="w-10 h-10 rounded-full border-2 border-lego-black bg-lego-yellow flex items-center justify-center text-xl">
-                        {f.friend.avatar}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-black text-lego-black">{f.friend.username}</p>
-                        <p className="text-xs text-lego-dark-gray font-semibold">想加你为好友</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => accept(f.id)} className="btn-lego"
-                          style={{ padding: '6px 14px', fontSize: '13px' }}>✓ 接受</button>
-                        <button onClick={() => remove(f.id)} className="btn-lego-outline"
-                          style={{ padding: '6px 12px', fontSize: '13px' }}>✗</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {accepted.length > 0 && (
-              <div className="lego-card p-5">
-                <h3 className="font-black text-lego-black mb-4">👥 我的好友 ({accepted.length})</h3>
+              <div className="card-soft p-6">
+                <h3 className="font-extrabold text-lego-black mb-4 inline-flex items-center gap-2">
+                  <Inbox size={18} strokeWidth={2.2} /> Requests ({pendingReceived.length})
+                </h3>
                 <div className="space-y-2">
-                  {accepted.map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-md hover:bg-lego-light-gray">
-                      <div className="w-10 h-10 rounded-full border-2 border-lego-black bg-lego-yellow flex items-center justify-center text-xl">
-                        {f.friend.avatar}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-black text-lego-black">{f.friend.username}</p>
-                        <p className="text-xs text-lego-green font-semibold">● Online</p>
+                  {pendingReceived.map(f => (
+                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: 'rgba(247,209,23,0.12)' }}>
+                      <Avatar emoji={f.friend.avatar} radius={999} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
+                        <p className="text-xs text-lego-dark-gray font-medium">想加你为好友</p>
                       </div>
                       <div className="flex gap-2">
-                        <Link href={`/dm?toId=${f.friend.id}&toName=${f.friend.username}&toAvatar=${f.friend.avatar}`}
-                          className="btn-lego" style={{ padding: '6px 14px', fontSize: '13px' }}>
-                          💬 私信
-                        </Link>
-                        <button onClick={() => remove(f.id)} className="btn-lego-outline"
-                          style={{ padding: '6px 12px', fontSize: '13px', color: '#E3000B' }}>
-                          删除
+                        <button onClick={() => accept(f.id)} className="btn-pill" style={{ padding: '8px 16px', fontSize: 13 }}>
+                          <Check size={14} strokeWidth={3} /> Accept
+                        </button>
+                        <button onClick={() => remove(f.id)}
+                          className="w-9 h-9 flex items-center justify-center rounded-full border border-black/10 text-lego-dark-gray hover:bg-black/5 transition-colors"
+                          aria-label="Decline">
+                          <X size={16} />
                         </button>
                       </div>
                     </div>
@@ -242,21 +260,56 @@ export default function ProfilePage() {
               </div>
             )}
 
+            {/* Accepted */}
+            {accepted.length > 0 && (
+              <div className="card-soft p-6">
+                <h3 className="font-extrabold text-lego-black mb-4 inline-flex items-center gap-2">
+                  <Users size={18} strokeWidth={2.2} /> Friends ({accepted.length})
+                </h3>
+                <div className="space-y-1">
+                  {accepted.map(f => (
+                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-black/[0.03] transition-colors">
+                      <Avatar emoji={f.friend.avatar} radius={999} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
+                        <p className="text-xs text-lego-green font-semibold inline-flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-lego-green" /> Online
+                        </p>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Link href={`/dm?toId=${f.friend.id}&toName=${f.friend.username}&toAvatar=${f.friend.avatar}`}
+                          className="btn-pill" style={{ padding: '8px 16px', fontSize: 13 }}>
+                          <MessageCircle size={14} strokeWidth={2.4} /> Message
+                        </Link>
+                        <button onClick={() => remove(f.id)}
+                          className="w-9 h-9 flex items-center justify-center rounded-full border border-black/10 text-lego-gray hover:text-lego-red hover:border-lego-red/30 transition-colors"
+                          aria-label="Remove friend">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending sent */}
             {pendingSent.length > 0 && (
-              <div className="lego-card p-5">
-                <h3 className="font-black text-lego-black mb-4">⏳ 已发出的请求 ({pendingSent.length})</h3>
-                <div className="space-y-2">
+              <div className="card-soft p-6">
+                <h3 className="font-extrabold text-lego-black mb-4 inline-flex items-center gap-2">
+                  <Clock size={18} strokeWidth={2.2} /> Sent ({pendingSent.length})
+                </h3>
+                <div className="space-y-1">
                   {pendingSent.map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-md bg-lego-light-gray">
-                      <div className="w-10 h-10 rounded-full border-2 border-lego-black bg-lego-yellow flex items-center justify-center text-xl">
-                        {f.friend.avatar}
+                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl bg-black/[0.02]">
+                      <Avatar emoji={f.friend.avatar} radius={999} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
+                        <p className="text-xs text-lego-gray font-medium">等待对方接受…</p>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-black text-lego-black">{f.friend.username}</p>
-                        <p className="text-xs text-lego-gray font-semibold">等待对方接受...</p>
-                      </div>
-                      <button onClick={() => remove(f.id)} className="btn-lego-outline"
-                        style={{ padding: '6px 12px', fontSize: '13px' }}>取消</button>
+                      <button onClick={() => remove(f.id)} className="btn-pill-outline" style={{ padding: '7px 15px', fontSize: 13 }}>
+                        Cancel
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -264,10 +317,15 @@ export default function ProfilePage() {
             )}
 
             {accepted.length === 0 && pendingReceived.length === 0 && pendingSent.length === 0 && (
-              <div className="lego-card p-10 text-center">
-                <div className="text-5xl mb-3">👋</div>
-                <h3 className="font-black text-xl text-lego-black mb-2">还没有好友</h3>
-                <p className="text-lego-dark-gray font-semibold">去聊天室认识积木爱好者！</p>
+              <div className="card-soft px-8 py-14 text-center">
+                <BrickStack
+                  ns="empty-friends"
+                  bricks={[{ ox: 0, oy: 0, oz: 0, w: 2, d: 2, ...G.lilac }, { ox: 0.5, oy: 0.5, oz: WALL, w: 1, d: 1, ...G.yellow }]}
+                  unit={26}
+                  className="w-24 h-auto mx-auto mb-5 brick-shadow"
+                />
+                <h3 className="font-extrabold text-xl text-lego-black mb-2">No friends yet</h3>
+                <p className="text-lego-dark-gray font-medium">去 Community 聊天室认识积木爱好者。</p>
               </div>
             )}
           </div>
@@ -276,45 +334,47 @@ export default function ProfilePage() {
 
       {/* Project modal */}
       {selectedProject && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedProject(null)}>
-          <div className="lego-card bg-white w-full max-w-lg max-h-[80vh] overflow-y-auto"
+          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+            style={{ boxShadow: '0 40px 80px rgba(28,28,28,0.28)' }}
             onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b-2 border-lego-black flex items-center justify-between bg-lego-yellow">
+            <div className="p-6 flex items-start justify-between gap-4">
               <div>
-                <h3 className="font-black text-xl text-lego-black">
+                <div className="eyebrow-min mb-1.5">Build</div>
+                <h3 className="font-extrabold text-2xl text-lego-black tracking-tight">
                   {selectedProject.result_json?.buildingName || 'Build'}
                 </h3>
-                <p className="text-sm font-semibold text-lego-dark-gray">{timeAgo(selectedProject.created_at)}</p>
+                <p className="text-sm font-medium text-lego-gray mt-0.5">{timeAgo(selectedProject.created_at)}</p>
               </div>
               <button onClick={() => setSelectedProject(null)}
-                className="w-8 h-8 rounded-md border-2 border-lego-black bg-white font-black flex items-center justify-center">
-                ✕
+                className="w-9 h-9 flex items-center justify-center rounded-full border border-black/10 text-lego-dark-gray hover:bg-black/5 transition-colors flex-shrink-0"
+                aria-label="Close">
+                <X size={18} />
               </button>
             </div>
             {selectedProject.image_url && (
-              <div className="border-b-2 border-lego-black">
-                <img
-                  src={selectedProject.image_url.startsWith('/static/')
-                    ? `${API_URL}${selectedProject.image_url}` : selectedProject.image_url}
-                  alt="" className="w-full h-48 object-cover" />
+              <div className="px-6">
+                <div className="rounded-2xl overflow-hidden" style={{ boxShadow: '0 14px 30px rgba(28,28,28,0.12)' }}>
+                  <img
+                    src={selectedProject.image_url.startsWith('/static/')
+                      ? `${API_URL}${selectedProject.image_url}` : selectedProject.image_url}
+                    alt="" className="w-full h-52 object-cover" />
+                </div>
               </div>
             )}
             {selectedProject.result_json && (
-              <div className="p-5">
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="lego-badge">🧱 {selectedProject.result_json.estimatedPieceCount} pieces</span>
-                  <span className="lego-badge bg-white">⏱️ {selectedProject.result_json.estimatedTime}</span>
-                  <span className="lego-badge text-white"
-                    style={{ background: DIFFICULTY_COLORS[selectedProject.result_json.difficulty] || '#888' }}>
-                    {selectedProject.result_json.difficulty}
-                  </span>
+              <div className="p-6">
+                <div className="flex flex-wrap gap-2 mb-5">
+                  <span className="badge-soft"><Boxes size={14} strokeWidth={2.2} /> {selectedProject.result_json.estimatedPieceCount} pieces</span>
+                  <span className="badge-soft"><Clock size={14} strokeWidth={2.2} /> {selectedProject.result_json.estimatedTime}</span>
+                  <DifficultyBadge level={selectedProject.result_json.difficulty} />
                 </div>
                 {selectedProject.depth_data && !('skipped' in selectedProject.depth_data) && (
-                  <div className="p-3 rounded-md border-2 border-lego-light-gray bg-lego-light-gray/50 text-xs font-mono text-lego-dark-gray">
-                    <p className="font-black text-lego-black mb-1">Depth Analysis (DepthAnything V2)</p>
-                    <p>Mean depth: {String(selectedProject.depth_data.mean_depth ?? '—')} · Edge strength: {String(selectedProject.depth_data.edge_strength ?? '—')}</p>
-                    <p>Zone: {String(selectedProject.depth_data.dominant_depth_zone ?? '—')} · Complexity: {String(selectedProject.depth_data.geometric_complexity ?? '—')}</p>
+                  <div className="p-4 rounded-2xl text-xs font-mono text-lego-dark-gray" style={{ background: 'rgba(28,28,28,0.04)' }}>
+                    <p className="font-bold text-lego-black mb-1.5 not-italic" style={{ fontFamily: 'inherit' }}>Depth analysis · DepthAnything V2</p>
+                    <p>Mean depth: {String(selectedProject.depth_data.mean_depth ?? '-')} · Edge strength: {String(selectedProject.depth_data.edge_strength ?? '-')}</p>
+                    <p>Zone: {String(selectedProject.depth_data.dominant_depth_zone ?? '-')} · Complexity: {String(selectedProject.depth_data.geometric_complexity ?? '-')}</p>
                   </div>
                 )}
               </div>

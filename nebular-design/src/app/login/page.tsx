@@ -4,12 +4,15 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { BrickStack, G } from '@/components/Bricks';
+import { CircleAlert, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,43 +31,58 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen lego-stud-bg flex items-center justify-center px-4 py-16">
-      <div className="w-full max-w-md">
-        <div className="lego-card p-8 bg-white">
+    <div className="flex-1 flex items-center justify-center bg-lego-bg px-6 py-16">
+      <div className="w-full max-w-md animate-fade-up">
+        <div className="card-soft p-8 sm:p-10">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-lego-yellow border-[3px] border-lego-black shadow-[4px_4px_0_#1C1C1C] mb-4">
-              <span className="text-2xl">🧱</span>
-            </div>
-            <h1 className="font-black text-3xl text-lego-black">Welcome back!</h1>
-            <p className="text-lego-dark-gray font-semibold mt-1">Log in to continue building</p>
+            <BrickStack
+              ns="login-mark"
+              bricks={[{ ox: 0, oy: 0, oz: 0, w: 2, d: 1, ...G.yellow }]}
+              unit={30}
+              className="w-16 h-auto mx-auto mb-6 brick-shadow"
+            />
+            <h1 className="display-xl text-lego-black" style={{ fontSize: 'clamp(1.9rem, 4vw, 2.4rem)' }}>
+              Welcome back.
+            </h1>
+            <p className="text-lego-dark-gray font-medium mt-2">Log in to keep building.</p>
           </div>
 
           {error && (
-            <div className="mb-6 p-3 rounded-md font-bold text-sm border-2 bg-red-50"
-              style={{ borderColor: '#E3000B', color: '#E3000B' }}>
-              ⚠️ {error}
+            <div className="mb-6 flex items-center gap-2.5 px-4 py-3 rounded-2xl font-semibold text-sm"
+              style={{ background: 'rgba(227,0,11,0.08)', color: '#E3000B' }}>
+              <CircleAlert size={16} strokeWidth={2.2} className="flex-shrink-0" /> {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block font-black text-sm text-lego-black mb-1.5">Email</label>
-              <input type="email" required className="lego-input" placeholder="you@example.com"
+            <div className="flex flex-col gap-2">
+              <label htmlFor="email" className="font-bold text-sm text-lego-black">Email</label>
+              <input id="email" type="email" required className="input-soft" placeholder="you@example.com"
                 value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             </div>
-            <div>
-              <label className="block font-black text-sm text-lego-black mb-1.5">Password</label>
-              <input type="password" required className="lego-input" placeholder="••••••••"
-                value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+            <div className="flex flex-col gap-2">
+              <label htmlFor="password" className="font-bold text-sm text-lego-black">Password</label>
+              <div className="relative">
+                <input id="password" type={showPw ? 'text' : 'password'} required className="input-soft pr-12"
+                  placeholder="••••••••" value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })} />
+                <button type="button" onClick={() => setShowPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg text-lego-gray hover:text-lego-black hover:bg-black/5 transition-colors"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}>
+                  {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
             </div>
-            <button type="submit" disabled={loading} className="btn-lego w-full text-base py-3">
-              {loading ? '⏳ Logging in...' : '🚀 Log In'}
+            <button type="submit" disabled={loading} className="btn-pill w-full justify-center !py-3.5 disabled:opacity-50 disabled:pointer-events-none">
+              {loading ? <><Loader2 size={17} className="animate-spin" /> Logging in…</> : <>Log in <ArrowRight size={17} strokeWidth={2.4} /></>}
             </button>
           </form>
 
-          <p className="text-center text-lego-dark-gray font-semibold mt-6 text-sm">
+          <p className="text-center text-lego-dark-gray font-medium mt-7 text-sm">
             No account?{' '}
-            <Link href="/register" className="text-lego-black font-black hover:underline">Sign up free →</Link>
+            <Link href="/register" className="text-lego-black font-bold underline decoration-lego-yellow decoration-2 underline-offset-2 hover:decoration-lego-black transition-colors">
+              Sign up free
+            </Link>
           </p>
         </div>
       </div>

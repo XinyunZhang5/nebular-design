@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { BrickStack, G } from '@/components/Bricks';
+import { CircleAlert, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
 
 const AVATARS = ['🟡', '🔵', '🟢', '🔴', '🟠', '🟣', '⚫', '🟤'];
 
@@ -13,6 +15,7 @@ export default function RegisterPage() {
   const [avatar, setAvatar] = useState('🟡');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,65 +35,87 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen lego-stud-bg flex items-center justify-center px-4 py-16">
-      <div className="w-full max-w-md">
-        <div className="lego-card p-8 bg-white">
+    <div className="flex-1 flex items-center justify-center bg-lego-bg px-6 py-16">
+      <div className="w-full max-w-md animate-fade-up">
+        <div className="card-soft p-8 sm:p-10">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-lego-yellow border-[3px] border-lego-black shadow-[4px_4px_0_#1C1C1C] mb-4">
-              <span className="text-2xl">✨</span>
-            </div>
-            <h1 className="font-black text-3xl text-lego-black">Join the builders!</h1>
-            <p className="text-lego-dark-gray font-semibold mt-1">Create your free account</p>
+            <BrickStack
+              ns="register-mark"
+              bricks={[
+                { ox: 0, oy: 0, oz: 0, w: 2, d: 1, ...G.sky },
+                { ox: 0.5, oy: 0, oz: 1.15, w: 1, d: 1, ...G.yellow },
+              ]}
+              unit={30}
+              className="w-16 h-auto mx-auto mb-6 brick-shadow"
+            />
+            <h1 className="display-xl text-lego-black" style={{ fontSize: 'clamp(1.9rem, 4vw, 2.4rem)' }}>
+              Join the builders.
+            </h1>
+            <p className="text-lego-dark-gray font-medium mt-2">Create your free account.</p>
           </div>
 
           {error && (
-            <div className="mb-6 p-3 rounded-md font-bold text-sm border-2 bg-red-50"
-              style={{ borderColor: '#E3000B', color: '#E3000B' }}>⚠️ {error}</div>
+            <div className="mb-6 flex items-center gap-2.5 px-4 py-3 rounded-2xl font-semibold text-sm"
+              style={{ background: 'rgba(227,0,11,0.08)', color: '#E3000B' }}>
+              <CircleAlert size={16} strokeWidth={2.2} className="flex-shrink-0" /> {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block font-black text-sm text-lego-black mb-2">Choose your avatar</label>
-              <div className="flex flex-wrap gap-2">
-                {AVATARS.map(a => (
-                  <button key={a} type="button" onClick={() => setAvatar(a)}
-                    className="w-10 h-10 rounded-md text-xl flex items-center justify-center border-2 transition-all"
-                    style={{
-                      borderColor: avatar === a ? '#1C1C1C' : '#D0D0D0',
-                      background: avatar === a ? '#F7D117' : '#F2F2F2',
-                      boxShadow: avatar === a ? '3px 3px 0 #1C1C1C' : 'none',
-                      transform: avatar === a ? 'translate(-1px,-1px)' : 'none',
-                    }}>
-                    {a}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-2.5">
+              <label className="font-bold text-sm text-lego-black">Choose your avatar</label>
+              <div className="flex flex-wrap gap-2.5">
+                {AVATARS.map(a => {
+                  const on = avatar === a;
+                  return (
+                    <button key={a} type="button" onClick={() => setAvatar(a)}
+                      className="w-11 h-11 rounded-full text-xl flex items-center justify-center transition-all"
+                      style={{
+                        background: on ? 'rgba(247,209,23,0.9)' : 'rgba(28,28,28,0.05)',
+                        boxShadow: on ? '0 0 0 2px #1C1C1C' : 'none',
+                        transform: on ? 'translateY(-1px)' : 'none',
+                      }}
+                      aria-label={`Avatar ${a}`} aria-pressed={on}>
+                      {a}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <div>
-              <label className="block font-black text-sm text-lego-black mb-1.5">Username</label>
-              <input type="text" required minLength={3} maxLength={20} className="lego-input"
+            <div className="flex flex-col gap-2">
+              <label htmlFor="username" className="font-bold text-sm text-lego-black">Username</label>
+              <input id="username" type="text" required minLength={3} maxLength={20} className="input-soft"
                 placeholder="BrickMaster99" value={form.username}
                 onChange={e => setForm({ ...form, username: e.target.value })} />
             </div>
-            <div>
-              <label className="block font-black text-sm text-lego-black mb-1.5">Email</label>
-              <input type="email" required className="lego-input" placeholder="you@example.com"
+            <div className="flex flex-col gap-2">
+              <label htmlFor="email" className="font-bold text-sm text-lego-black">Email</label>
+              <input id="email" type="email" required className="input-soft" placeholder="you@example.com"
                 value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             </div>
-            <div>
-              <label className="block font-black text-sm text-lego-black mb-1.5">Password</label>
-              <input type="password" required minLength={6} className="lego-input"
-                placeholder="At least 6 characters" value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })} />
+            <div className="flex flex-col gap-2">
+              <label htmlFor="password" className="font-bold text-sm text-lego-black">Password</label>
+              <div className="relative">
+                <input id="password" type={showPw ? 'text' : 'password'} required minLength={6} className="input-soft pr-12"
+                  placeholder="At least 6 characters" value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })} />
+                <button type="button" onClick={() => setShowPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg text-lego-gray hover:text-lego-black hover:bg-black/5 transition-colors"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}>
+                  {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
             </div>
-            <button type="submit" disabled={loading} className="btn-lego w-full text-base py-3">
-              {loading ? '⏳ Creating account...' : '🧱 Create My Account'}
+            <button type="submit" disabled={loading} className="btn-pill w-full justify-center !py-3.5 disabled:opacity-50 disabled:pointer-events-none">
+              {loading ? <><Loader2 size={17} className="animate-spin" /> Creating account…</> : <>Create account <ArrowRight size={17} strokeWidth={2.4} /></>}
             </button>
           </form>
 
-          <p className="text-center text-lego-dark-gray font-semibold mt-6 text-sm">
+          <p className="text-center text-lego-dark-gray font-medium mt-7 text-sm">
             Already have an account?{' '}
-            <Link href="/login" className="text-lego-black font-black hover:underline">Log in →</Link>
+            <Link href="/login" className="text-lego-black font-bold underline decoration-lego-yellow decoration-2 underline-offset-2 hover:decoration-lego-black transition-colors">
+              Log in
+            </Link>
           </p>
         </div>
       </div>

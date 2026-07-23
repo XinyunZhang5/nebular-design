@@ -4,9 +4,20 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dmWsUrl, MessageOut, UserOut } from '@/lib/api';
+import { BrickStack, G, WALL } from '@/components/Bricks';
+import { ChevronLeft, Wifi, WifiOff, Send, Loader2 } from 'lucide-react';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function Avatar({ emoji, size = 36 }: { emoji: string; size?: number }) {
+  return (
+    <span className="rounded-full flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.5, background: 'rgba(247,209,23,0.24)' }}>
+      {emoji}
+    </span>
+  );
 }
 
 function DMContent() {
@@ -68,53 +79,55 @@ function DMContent() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-lego-bg flex flex-col">
-      <div className="bg-lego-yellow border-b-[3px] border-lego-black px-4 py-4 flex items-center gap-4">
-        <Link href="/profile" className="btn-lego-outline" style={{ padding: '6px 14px', fontSize: '13px' }}>
-          ← Back
+    <div className="flex-1 bg-lego-bg flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="border-b hairline bg-lego-bg/80 backdrop-blur-sm px-4 sm:px-6 py-4 flex items-center gap-3.5">
+        <Link href="/profile"
+          className="w-9 h-9 flex items-center justify-center rounded-full border border-black/10 text-lego-dark-gray hover:bg-black/5 transition-colors flex-shrink-0"
+          aria-label="Back to profile">
+          <ChevronLeft size={18} />
         </Link>
-        <div className="w-10 h-10 rounded-full border-2 border-lego-black bg-white flex items-center justify-center text-xl"
-          style={{ boxShadow: '2px 2px 0 #1C1C1C' }}>
-          {toAvatar}
-        </div>
+        <Avatar emoji={toAvatar} size={42} />
         <div>
-          <h2 className="font-black text-lego-black">{toName}</h2>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ background: connected ? '#007934' : '#E3000B' }} />
-            <p className="text-xs text-lego-dark-gray font-semibold">
-              {connected ? 'WebSocket connected' : 'Connecting...'}
-            </p>
+          <h2 className="font-extrabold text-lg text-lego-black tracking-tight">{toName}</h2>
+          <div className="flex items-center gap-1.5 text-xs font-medium"
+            style={{ color: connected ? '#007934' : '#9A9A9A' }}>
+            {connected ? <Wifi size={13} strokeWidth={2.4} /> : <WifiOff size={13} strokeWidth={2.4} />}
+            {connected ? 'Connected' : 'Connecting…'}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6 min-h-0 max-w-3xl w-full mx-auto">
         {messages.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-5xl mb-3">💬</div>
-            <p className="font-black text-lego-black mb-1">还没有消息</p>
-            <p className="text-lego-dark-gray font-semibold text-sm">发送第一条消息开始聊天！</p>
+          <div className="text-center py-16">
+            <BrickStack
+              ns="dm-empty"
+              bricks={[{ ox: 0, oy: 0, oz: 0, w: 2, d: 1, ...G.sky }, { ox: 0.5, oy: 0, oz: WALL, w: 1, d: 1, ...G.coral }]}
+              unit={26}
+              className="w-24 h-auto mx-auto mb-5 brick-shadow"
+            />
+            <p className="font-extrabold text-lego-black mb-1">No messages yet</p>
+            <p className="text-lego-dark-gray font-medium text-sm">发送第一条消息，开始聊天。</p>
           </div>
         )}
         {messages.map(msg => {
           const isOwn = msg.sender_id === user.id;
           return (
             <div key={msg.id} className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
-              <div className="w-8 h-8 rounded-full border-2 border-lego-black flex items-center justify-center text-base flex-shrink-0"
-                style={{ background: '#F7D117' }}>
-                {msg.sender_avatar}
-              </div>
-              <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-black text-lego-dark-gray">{msg.sender_username}</span>
+              <Avatar emoji={msg.sender_avatar} size={34} />
+              <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[72%]`}>
+                <div className="flex items-center gap-2 mb-1.5 px-1">
+                  <span className="text-xs font-bold text-lego-dark-gray">{msg.sender_username}</span>
                   <span className="text-xs text-lego-gray">{formatTime(msg.created_at)}</span>
                 </div>
-                <div className="px-4 py-2.5 text-sm font-semibold leading-relaxed"
+                <div className="px-4 py-2.5 text-sm font-medium leading-relaxed"
                   style={{
-                    background: isOwn ? '#F7D117' : '#FFFFFF',
-                    border: '2px solid #1C1C1C',
-                    boxShadow: isOwn ? '3px 3px 0 #C9A800' : '3px 3px 0 #1C1C1C',
-                    borderRadius: isOwn ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
+                    background: isOwn ? '#1C1C1C' : '#FFFFFF',
+                    color: isOwn ? '#FFFFFF' : '#1C1C1C',
+                    borderRadius: isOwn ? '18px 6px 18px 18px' : '6px 18px 18px 18px',
+                    boxShadow: isOwn ? 'none' : '0 4px 14px rgba(28,28,28,0.07)',
                   }}>
                   {msg.content}
                 </div>
@@ -125,13 +138,16 @@ function DMContent() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t-[3px] border-lego-black bg-white p-4">
-        <form onSubmit={send} className="flex gap-3">
+      {/* Composer */}
+      <div className="border-t hairline bg-white/70 backdrop-blur-sm px-4 sm:px-6 py-4">
+        <form onSubmit={send} className="flex gap-3 max-w-3xl mx-auto">
           <input type="text" value={input} onChange={e => setInput(e.target.value)}
-            placeholder={`给 ${toName} 发消息...`} className="lego-input flex-1" maxLength={500} />
+            placeholder={`给 ${toName} 发消息…`} className="input-soft flex-1" maxLength={500} />
           <button type="submit" disabled={!input.trim() || !connected}
-            className="btn-lego flex-shrink-0" style={{ padding: '10px 20px' }}>
-            发送 →
+            className="btn-pill btn-pill-sm flex-shrink-0 disabled:opacity-40 disabled:pointer-events-none"
+            aria-label="Send message">
+            <Send size={16} strokeWidth={2.4} />
+            <span className="hidden sm:inline">Send</span>
           </button>
         </form>
       </div>
@@ -142,10 +158,10 @@ function DMContent() {
 export default function DMPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center lego-stud-bg">
-        <div className="lego-card p-8 text-center">
-          <div className="text-4xl mb-3">⏳</div>
-          <p className="font-black text-lego-black">Loading...</p>
+      <div className="flex-1 flex items-center justify-center bg-lego-bg">
+        <div className="card-soft px-10 py-8 text-center">
+          <Loader2 size={28} className="animate-spin mx-auto mb-3 text-lego-black" />
+          <p className="font-bold text-lego-black">Loading…</p>
         </div>
       </div>
     }>

@@ -102,6 +102,100 @@ body {
   .animate-fade-up, .animate-drift, .animate-float, .animate-build-in { animation: none; }
 }
 
+/* ===== Editorial sub-page utilities (Build / Community / Profile) =====
+   Shared surface language so the app pages match the home page:
+   soft rounded cards, tinted shadows, pill controls, hairline rings.
+   These replace the old hard-bordered toy-brick components. */
+
+.card-soft {
+  background: #FFFFFF;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(28,28,28,0.04), 0 20px 40px rgba(28,28,28,0.07);
+}
+.card-hover {
+  transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), box-shadow 0.28s;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 1px 2px rgba(28,28,28,0.05), 0 28px 52px rgba(28,28,28,0.12);
+}
+
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(28,28,28,0.05);
+  color: #1C1C1C;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
+}
+.badge-yellow { background: rgba(247,209,23,0.24); color: #1C1C1C; }
+
+.btn-pill-sm { padding: 10px 18px; font-size: 14px; }
+
+.btn-pill-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: #1C1C1C;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 13px 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(28,28,28,0.14);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.22s, border-color 0.22s, transform 0.22s;
+}
+.btn-pill-outline:hover { background: rgba(28,28,28,0.04); border-color: rgba(28,28,28,0.28); }
+.btn-pill-outline:active { transform: translateY(1px); }
+
+.input-soft {
+  width: 100%;
+  background: #FFFFFF;
+  border: 1px solid rgba(28,28,28,0.12);
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #1C1C1C;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-soft::placeholder { color: #A6A29A; font-weight: 600; }
+.input-soft:focus {
+  border-color: #1C1C1C;
+  box-shadow: 0 0 0 4px rgba(28,28,28,0.06);
+}
+
+.tab-underline {
+  position: relative;
+  padding: 10px 2px;
+  font-weight: 800;
+  font-size: 15px;
+  color: rgba(28,28,28,0.38);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+  letter-spacing: -0.01em;
+}
+.tab-underline:hover { color: rgba(28,28,28,0.7); }
+.tab-underline[data-active="true"] { color: #1C1C1C; }
+.tab-underline[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: #1C1C1C;
+  border-radius: 2px;
+}
+
 /* LEGO Stud pattern background */
 .lego-stud-bg {
   background-color: #F2F2F2;
