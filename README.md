@@ -1,8 +1,9 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+  <img src="docs/banner-light.svg" alt="Nebular Design: photograph a building, get the real LEGO parts list and the steps to build it" width="100%">
+</picture>
+
 <div align="center">
-
-# Nebular Design
-
-**Photograph a building. Get the real LEGO parts list, and the steps to build it.**
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-1C1C1C?style=flat-square&logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-1C1C1C?style=flat-square&logo=react&logoColor=white)
@@ -12,52 +13,30 @@
 
 </div>
 
-<!-- SCREENSHOT SLOT 1 of 5
-     Replace the src below with: docs/screenshots/landing.png
-     Shot: the landing page, full width, top of the fold. Recommended 1280x720. -->
-<img src="https://placehold.co/1280x720/F3F2EE/1C1C1C/png?text=Landing+page" alt="Nebular Design landing page" width="100%">
+Upload a photo of a building. A depth model reads the flat image into a rough sense of its geometry,
+Claude maps that geometry onto real LEGO part numbers, and you get back a parts list with numbered
+assembly steps. Every build is saved to your profile, and there is a public chat room plus
+friend-to-friend messages so builders can compare notes on the same structure.
 
-## What it does
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/pipeline-dark.svg">
+  <img src="docs/pipeline-light.svg" alt="Pipeline: photograph, read depth, match bricks, build it" width="100%">
+</picture>
 
-You upload a photo of a building. A depth-estimation model reads the flat image into a rough sense
-of its geometry, then Claude maps that geometry onto real LEGO part numbers and writes the assembly
-steps. Every build is saved to your profile, and there is a public chat room plus friend-to-friend
-direct messages so builders can compare notes on the same structure.
-
-Three moves, the way the app puts it: **photograph it**, the engine **maps the bricks**, then you
-**build it for real**.
-
-## How it works
-
-```
-  photo upload  (JPG / PNG / WebP, up to 15 MB)
-        |
-        v
-  Depth Anything V2 Small      2D image to depth map, CPU, loaded lazily on first call
-        |
-        v
-  Claude                       image + depth to part numbers, quantities, colour palette
-        |
-        v
-  parts list + numbered build steps
-        |
-        v
-  saved to your profile   ->   shared in the chat room
-```
-
-The depth model is loaded once into a thread pool, so a cold first request pays the model load and
-every request after it does not block the event loop. When `ANTHROPIC_API_KEY` is absent, or the
-Claude call fails, the brick matcher returns a bundled sample build instead of erroring, which keeps
-the whole upload flow clickable without a key.
+The depth model loads once into a thread pool, so a cold first request pays the model load and every
+request after it stays off the event loop. When `ANTHROPIC_API_KEY` is missing, or the Claude call
+fails, brick matching returns a bundled sample build instead of erroring, which keeps the whole
+upload flow clickable without a key.
 
 ## Screenshots
 
-<!-- SCREENSHOT SLOTS 2 to 5
-     Replace each src with a local file under docs/screenshots/. Recommended 960x600 each.
+<!-- SCREENSHOT SLOTS. Drop your own PNGs into docs/screenshots/ and swap each src below.
+     Suggested width 1200px, any 16:10-ish crop.
        upload.png        the drag-and-drop upload panel
-       parts.png         the result view: parts list + colour palette + total pieces
+       parts.png         the result view: parts list, colour palette, total pieces
        instructions.png  the numbered build steps
        community.png     the chat room or a DM thread -->
+
 | Upload | Parts list |
 | :---: | :---: |
 | <img src="https://placehold.co/960x600/F3F2EE/1C1C1C/png?text=Upload" alt="Upload panel" width="100%"> | <img src="https://placehold.co/960x600/F3F2EE/1C1C1C/png?text=Parts+list" alt="Parts list and colour palette" width="100%"> |
@@ -78,7 +57,7 @@ the whole upload flow clickable without a key.
 
 ## Run it locally
 
-You need Node 20 or newer, Python 3.12 or newer, and a PostgreSQL database.
+Node 20 or newer, Python 3.12 or newer, and a PostgreSQL database.
 
 **Backend**
 
@@ -86,8 +65,8 @@ You need Node 20 or newer, Python 3.12 or newer, and a PostgreSQL database.
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # then fill in DATABASE_URL and ANTHROPIC_API_KEY
-python run.py                 # http://localhost:8000, docs at /docs
+cp .env.example .env          # fill in DATABASE_URL and ANTHROPIC_API_KEY
+python run.py                 # http://localhost:8000, interactive docs at /docs
 ```
 
 **Frontend**
@@ -141,16 +120,17 @@ nebular-design/
   src/app/            upload, profile, chat, dm, login, register
   src/components/     Navbar, Bricks
   src/lib/api.ts      typed fetch wrapper, JWT from localStorage
+docs/                 README artwork and screenshots
 plan.txt              the original scope, user stories, acceptance criteria
 ```
 
 ## Status
 
 The full path from photo to parts list to build steps runs end to end, along with accounts, build
-history, the public chat room, friends, and DMs. Known rough edges worth naming:
+history, the public chat room, friends, and DMs. Rough edges worth naming:
 
 - Depth estimation runs on CPU, so the first upload after a cold start is slow while the model loads.
 - Part matching is only as good as the model's LEGO knowledge. Part numbers are plausible rather than
   verified against a live catalogue.
-- There is no 3D preview of the result yet. The output is a parts list plus written steps, which was
-  the deliberate scope cut in `plan.txt`.
+- There is no 3D preview yet. The output is a parts list plus written steps, which was the deliberate
+  scope cut in `plan.txt`.
