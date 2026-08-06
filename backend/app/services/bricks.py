@@ -1,178 +1,211 @@
 """AI brick matching service — calls Claude with image + depth data."""
 
+import asyncio
 import base64
+import io
 import json
 import logging
 from typing import Any
 
 import anthropic
+from PIL import Image
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-MOCK_RESULT = {
-    "buildingName": "Classic Town House",
-    "difficulty": "Intermediate",
-    "estimatedPieceCount": 312,
-    "estimatedTime": "3-4 hours",
-    "colorPalette": ["White", "Light Bluish Gray", "Dark Bluish Gray", "Tan"],
-    "bricks": [
-        {"name": "2×4 Brick", "partId": "3001", "color": "White", "quantity": 48, "description": "Main wall sections"},
-        {"name": "2×2 Brick", "partId": "3003", "color": "White", "quantity": 36, "description": "Corner joints"},
-        {"name": "1×4 Brick", "partId": "3010", "color": "Light Bluish Gray", "quantity": 30, "description": "Window lintels and sills"},
-        {"name": "1×2 Plate", "partId": "3023", "color": "White", "quantity": 44, "description": "Thin floor layers"},
-        {"name": "2×4 Plate", "partId": "3020", "color": "Tan", "quantity": 20, "description": "Foundation plates"},
-        {"name": "1×2 Slope 45°", "partId": "3040", "color": "Dark Bluish Gray", "quantity": 28, "description": "Roof edge slopes"},
-        {"name": "2×4 Slope 45°", "partId": "3037", "color": "Dark Bluish Gray", "quantity": 18, "description": "Main roof panels"},
-        {"name": "1×2 Tile", "partId": "3069b", "color": "Light Bluish Gray", "quantity": 32, "description": "Window and floor tiles"},
-        {"name": "Trans-Clear 1×2 Plate", "partId": "3023t", "color": "Transparent", "quantity": 24, "description": "Window glass"},
-        {"name": "Door Frame 1×4×6", "partId": "60596", "color": "White", "quantity": 2, "description": "Main entrance frame"},
-        {"name": "Window Frame 1×2×2", "partId": "60592", "color": "White", "quantity": 8, "description": "Window frames"},
-        {"name": "1×1 Round Plate", "partId": "6141", "color": "Dark Bluish Gray", "quantity": 20, "description": "Detail accents"},
-    ],
-    "steps": [
-        {
-            "step": 1,
-            "title": "Foundation",
-            "description": "Lay 2×4 Tan Plates across a 16×16 baseplate to form the ground floor.",
-            "bricksUsed": ["2×4 Plate (Tan) ×10"],
-            "tip": "Use a flat surface — gaps in the foundation affect all layers above.",
-        },
-        {
-            "step": 2,
-            "title": "Ground Floor Walls",
-            "description": "Stack White 2×4 and 2×2 Bricks four courses high, offsetting joints each row.",
-            "bricksUsed": ["2×4 Brick (White) ×20", "2×2 Brick (White) ×18"],
-            "tip": "Stagger bricks by 2 studs per row for structural integrity.",
-        },
-        {
-            "step": 3,
-            "title": "Door & Window Openings",
-            "description": "Insert Door Frame and Window Frames into openings. Cap each with a 1×4 Gray lintel.",
-            "bricksUsed": ["Door Frame 1×4×6 ×2", "Window Frame 1×2×2 ×8", "1×4 Brick (Light Bluish Gray) ×8"],
-        },
-        {
-            "step": 4,
-            "title": "Upper Floor",
-            "description": "Continue wall courses for the second storey. Place Trans-Clear plates flush with window openings.",
-            "bricksUsed": ["2×4 Brick (White) ×28", "1×2 Plate (White) ×22", "Trans-Clear 1×2 ×24"],
-        },
-        {
-            "step": 5,
-            "title": "Roof Structure",
-            "description": "Build the pitched roof using 2×4 Slope 45° bricks along both sides of the ridge.",
-            "bricksUsed": ["2×4 Slope 45° (Dark Gray) ×18", "1×2 Slope 45° (Dark Gray) ×28"],
-            "tip": "Slopes on opposite sides should meet exactly at the ridge — check alignment before gluing.",
-        },
-        {
-            "step": 6,
-            "title": "Finishing Details",
-            "description": "Apply 1×2 Tiles on sills and floors. Add 1×1 Round Plates as accent studs.",
-            "bricksUsed": ["1×2 Tile (Light Gray) ×32", "1×1 Round Plate (Dark Gray) ×20"],
-        },
-    ],
-}
+# The vision API rejects any single image whose base64 payload exceeds 10 MB, and
+# base64 inflates raw bytes by about a third — so the raw image has to stay under
+# roughly 7.5 MB. We aim well below that.
+#
+# Separately, claude-sonnet-4-6 sits in the standard resolution tier, which downscales
+# anything longer than 1568 px on its long edge before the model ever sees it. Shrinking
+# to that edge here therefore costs no fidelity — it only avoids shipping bytes the API
+# would discard. Raise to 2576 if you move to a Claude 4.7-or-later model.
+CLAUDE_MAX_EDGE = 1568
+CLAUDE_MAX_BYTES = 4 * 1024 * 1024
 
-SYSTEM_PROMPT = """You are a professional LEGO Master Builder AI with expert knowledge of the complete LEGO parts catalog.
-Your role is to analyze building photographs and produce accurate, buildable LEGO construction plans.
-Always use real LEGO part names, official part IDs, and LEGO color names from the standard palette.
-Return ONLY a single JSON object — no markdown fences, no explanatory text before or after."""
 
-USER_PROMPT_TEMPLATE = """Analyze the provided building image and the accompanying 3D depth analysis data to generate a detailed LEGO build plan.
+def _prepare_for_claude(image_bytes: bytes, media_type: str) -> tuple[bytes, str]:
+    """Shrink an upload to something the vision API will accept.
 
-DEPTH ANALYSIS DATA:
-{depth_json}
+    Returns the original bytes untouched when they already fit, so small uploads keep
+    their encoding instead of paying for a needless re-compress.
+    """
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        width, height = image.size
+    except Exception:
+        logger.warning("Could not decode upload for resizing; sending it unchanged.")
+        return image_bytes, media_type
 
-Based on the visual content AND the depth data (which reveals the 3D structure, layer depth distribution, and geometric complexity), produce a JSON object with this exact shape:
+    if max(width, height) <= CLAUDE_MAX_EDGE and len(image_bytes) <= CLAUDE_MAX_BYTES:
+        return image_bytes, media_type
+
+    image = image.convert("RGB")  # JPEG carries no alpha channel
+    if max(width, height) > CLAUDE_MAX_EDGE:
+        scale = CLAUDE_MAX_EDGE / max(width, height)
+        image = image.resize(
+            (max(1, round(width * scale)), max(1, round(height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+
+    # Step the quality down until it fits. The first pass wins for almost every photo.
+    data = image_bytes
+    for quality in (85, 70, 55, 40):
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG", quality=quality, optimize=True)
+        data = buf.getvalue()
+        if len(data) <= CLAUDE_MAX_BYTES:
+            logger.info(
+                "Prepared image for Claude: %dx%d %.1fMB -> %dx%d %.1fMB (quality %d)",
+                width, height, len(image_bytes) / 1e6,
+                image.width, image.height, len(data) / 1e6, quality,
+            )
+            return data, "image/jpeg"
+
+    logger.warning(
+        "Image is still %.1fMB after compression; sending it and letting the API decide.",
+        len(data) / 1e6,
+    )
+    return data, "image/jpeg"
+
+SYSTEM_PROMPT = """You are an architecture writer for a LEGO design tool.
+
+A build plan has ALREADY been computed from the photograph by a geometry
+pipeline: every brick, its position, its colour and the total piece count are
+fixed and correct. You are not designing anything and you are not checking
+anything. Your job is the part a geometry pipeline cannot do — recognising the
+building and writing about it.
+
+Rules:
+- NEVER state a part number, a quantity, a piece count or a colour count. Those
+  are supplied to you as facts and are rendered separately.
+- If you recognise the specific building, name it. If you do not, describe it by
+  type and style instead of guessing a landmark.
+- Write plainly. No marketing voice, no exclamation marks.
+- Return ONLY a JSON object. No markdown fences, no text around it."""
+
+USER_PROMPT_TEMPLATE = """Here is the photograph a LEGO model was generated from.
+
+IMPORTANT — what actually got built:
+This is a free-standing model, built in courses of bricks on a plate floor, not a
+picture. Seen from the front it reproduces the photograph; seen from the side it
+has real depth, because parts of the subject that were nearer the camera stand
+further forward. The back is a flat plane — a single photograph says nothing
+about what is behind the subject, so nothing was invented there.
+
+The background was segmented away first. Sky, trees, grass, water, roads, people
+and vehicles are NOT built: there is simply no brick there, so the model's
+outline is the building's outline. Do not describe sky, water or landscape.
+Colours in the palette that look like sky or foliage come from the building
+itself — painted ironwork, weathered stone, glazing.
+
+Facts about the model (already computed — do not restate the numbers):
+- {grid_w} studs wide, {courses} courses tall, {depth} studs deep
+- {building_cells} of {cells} cells are building; the rest is open air
+- {visible} bricks make up the facade, over {hidden} that form the structure behind it
+- Palette actually used: {palette}
+
+Return this JSON — these three fields and nothing else:
 {{
-  "buildingName": "descriptive name for this structure",
-  "difficulty": "Beginner" | "Intermediate" | "Expert",
-  "estimatedPieceCount": <integer>,
-  "estimatedTime": "X–Y hours",
-  "colorPalette": ["LEGO Color 1", "LEGO Color 2", ...],
-  "bricks": [
-    {{
-      "name": "Official LEGO part name (e.g. '2×4 Brick')",
-      "partId": "official part number (e.g. '3001')",
-      "color": "official LEGO color name",
-      "quantity": <integer>,
-      "description": "where and how this piece is used in the build"
-    }}
-  ],
-  "steps": [
-    {{
-      "step": <integer>,
-      "title": "short phase name",
-      "description": "clear, actionable instruction for this step",
-      "bricksUsed": ["Part Name (Color) ×qty", ...],
-      "tip": "optional builder tip (omit key if not needed)"
-    }}
+  "buildingName": "the building's name if you recognise it, else a descriptive name",
+  "description": "2-3 sentences on what the building is and what makes it distinctive as a three-dimensional model",
+  "levelNotes": [
+    {{"level": 1, "title": "short phrase for this band of courses"}}
   ]
 }}
 
-Rules:
-- Include 10–16 distinct brick types proportional to the depth complexity data
-- Include 5–8 assembly steps in logical build order (foundation → walls → openings → upper floors → roof → details)
-- Use only real, purchasable LEGO colors (White, Black, Red, Blue, Yellow, Tan, etc.)
-- Let the depth layer distribution guide the quantity ratio between structural and detail pieces
-- estimatedPieceCount must equal the sum of all brick quantities"""
+The model is built bottom-up in {bands} bands of courses. Give exactly {bands}
+entries in levelNotes, numbered 1 upward: band 1 is the ground, band {bands} the
+top of the building."""
 
 
-async def analyze_image(image_bytes: bytes, content_type: str, depth_data: dict[str, Any]) -> dict[str, Any]:
-    """Analyze an image with Claude vision + depth data and return a LEGO build plan."""
+async def describe_build(
+    image_bytes: bytes,
+    content_type: str,
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Name and describe a plan that has already been computed.
+
+    Returns only prose. The caller merges it into the computed plan; nothing here
+    is allowed to change a part, a quantity or a coordinate. When the API key is
+    missing or the call fails, the plan simply goes out without the prose rather
+    than with invented numbers — the failure mode that produced the old fictional
+    parts lists.
+
+    Three fields, because three fields are all the UI renders: the title, the
+    paragraph under it, and one heading per band of courses. This used to also ask
+    for architecturalStyle, recognised, tips and a sentence per band; all four were
+    stored on the project and read by nothing, so every build paid for output
+    tokens that no one would ever see.
+    """
     if not settings.anthropic_api_key:
-        logger.warning("ANTHROPIC_API_KEY not set — returning mock data")
-        return MOCK_RESULT
+        logger.warning("ANTHROPIC_API_KEY not set — skipping description")
+        return {}
 
     media_type_map = {
-        "image/jpeg": "image/jpeg",
-        "image/jpg": "image/jpeg",
-        "image/png": "image/png",
-        "image/gif": "image/gif",
-        "image/webp": "image/webp",
+        "image/jpeg": "image/jpeg", "image/jpg": "image/jpeg", "image/png": "image/png",
+        "image/gif": "image/gif", "image/webp": "image/webp",
     }
     media_type = media_type_map.get(content_type, "image/jpeg")
-    b64 = base64.b64encode(image_bytes).decode()
-    depth_json = json.dumps(depth_data, indent=2)
+    payload, media_type = await asyncio.to_thread(_prepare_for_claude, image_bytes, media_type)
+    b64 = base64.b64encode(payload).decode()
+
+    grid = plan.get("grid", {})
+    # Bands, not courses: the steps are bands, so the notes have to be too, or the
+    # merge in the router silently drops every note that has no step to land on.
+    bands = len([s for s in plan.get("steps", []) if s.get("level")])
+    prompt = USER_PROMPT_TEMPLATE.format(
+        grid_w=grid.get("width", "?"),
+        courses=grid.get("courses", "?"),
+        depth=grid.get("depth", "?"),
+        bands=bands or "?",
+        cells=grid.get("cells", "?"),
+        building_cells=grid.get("buildingCells", "?"),
+        visible=plan.get("visiblePieceCount", "?"),
+        hidden=plan.get("hiddenPieceCount", "?"),
+        palette=", ".join(c["name"] for c in plan.get("colorPalette", [])) or "unknown",
+    )
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2500,
-            system=SYSTEM_PROMPT,
-            messages=[
-                {
+        response = await asyncio.to_thread(
+            lambda: client.messages.create(
+                model=settings.claude_model,
+                # A name, a paragraph and eight headings measured 772 tokens, so
+                # 800 was one long description away from a truncated response —
+                # and a truncated response is unparseable JSON, i.e. no prose at
+                # all. Tall buildings get more bands, so leave real headroom; the
+                # cap costs nothing unless it is reached.
+                max_tokens=1200,
+                system=SYSTEM_PROMPT,
+                messages=[{
                     "role": "user",
                     "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": b64,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": USER_PROMPT_TEMPLATE.format(depth_json=depth_json),
-                        },
+                        {"type": "image", "source": {"type": "base64",
+                                                     "media_type": media_type, "data": b64}},
+                        {"type": "text", "text": prompt},
                     ],
-                }
-            ],
+                }],
+            )
         )
-
-        raw = response.content[0].text if response.content else ""
-        # Extract JSON even if Claude adds any surrounding text
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
+        # Not content[0]: a response can open with a thinking block, and reading
+        # .text off one raises. That failure looked exactly like a model that had
+        # nothing to say — the build came back named "Untitled Structure" with no
+        # error surfaced anywhere the user could see.
+        raw = "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        )
+        start, end = raw.find("{"), raw.rfind("}") + 1
         if start == -1 or end == 0:
-            raise ValueError("No JSON object found in Claude response")
-        return json.loads(raw[start:end])
-
+            raise ValueError("No JSON object in Claude response")
+        data = json.loads(raw[start:end])
     except Exception as exc:
-        logger.exception("Claude brick analysis failed: %s", exc)
-        return MOCK_RESULT
+        logger.exception("Claude description failed: %s", exc)
+        return {}
+
+    # Keep only the prose fields. Anything else the model volunteered — a parts
+    # list, a piece count, a "corrected" quantity — is dropped on the floor.
+    return {k: data[k] for k in ("buildingName", "description", "levelNotes") if k in data}

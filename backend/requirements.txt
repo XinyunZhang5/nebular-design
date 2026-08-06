@@ -10,7 +10,23 @@ alembic==1.14.0
 boto3==1.35.80
 anthropic==0.40.0
 transformers==4.47.1
-torch==2.5.1
+
+# torch/torchvision, split by platform.
+#
+# On Linux, the default PyPI wheel drags in ~2.9 GB of NVIDIA CUDA packages
+# (cudnn, cublas, cusparse, nccl, ...). Railway containers have no GPU, so not
+# one byte of that is ever executed — it just makes the image 3.5 GB and slows
+# every deploy. The +cpu build is the same PyTorch with that payload removed:
+# 176 MB, and identical speed on a CPU-only box.
+#
+# macOS has no CUDA build at all, so there is no +cpu variant to ask for —
+# requesting one fails outright. Hence the markers rather than a single pin.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu ; sys_platform == "linux"
+torch==2.5.1 ; sys_platform != "linux"
+# SegFormer's image processor needs torchvision on transformers >= 5.
+torchvision==0.20.1+cpu ; sys_platform == "linux"
+torchvision==0.20.1 ; sys_platform != "linux"
 Pillow==11.0.0
 numpy==2.1.3
 python-dotenv==1.0.1
