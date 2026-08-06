@@ -2,14 +2,17 @@
 
 import json
 import logging
+import uuid
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db, AsyncSessionLocal
 from app.models import Message, User
 from app.schemas import MessageOut
 from app.dependencies import get_current_user, get_optional_user
+from app.ratelimit import chat_limiter
 from app.ws.manager import manager
 from app.config import get_settings
 
@@ -38,14 +41,14 @@ async def get_public_messages(
 ):
     result = await db.execute(
         select(Message)
+        .options(selectinload(Message.sender))
         .where(Message.msg_type == "public")
         .order_by(Message.created_at.desc())
-        .limit(limit)
+        .limit(min(limit, 200))
     )
     msgs = list(reversed(result.scalars().all()))
     out = []
     for m in msgs:
-        await db.refresh(m, ["sender"])
         out.append(MessageOut(
             id=m.id,
             sender_id=m.sender_id,
@@ -80,19 +83,26 @@ async def chatroom_websocket(websocket: WebSocket, token: str | None = None):
     user = await _resolve_ws_user(token)
     await manager.chatroom_connect(websocket)
 
+    # Identity for anyone without a token, derived here and never from the client.
+    # Short and stable for the life of the connection, so a guest reads as one
+    # person in the transcript rather than as a new stranger per message.
+    connection_key = uuid.uuid4().hex[:8]
+    guest_name = f"Guest-{connection_key[:4]}"
+
     # Send history on connect
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Message)
+            # selectinload, not a refresh per row. Loading the sender inside the
+            # loop issued one query per message — sixty-one round trips to build
+            # one payload, every time anybody opened the chat.
+            .options(selectinload(Message.sender))
             .where(Message.msg_type == "public")
             .order_by(Message.created_at.desc())
             .limit(60)
         )
         msgs = list(reversed(result.scalars().all()))
-        history = []
-        for m in msgs:
-            await db.refresh(m, ["sender"])
-            history.append(_msg_to_out(m, m.sender))
+        history = [_msg_to_out(m, m.sender) for m in msgs]
 
     await websocket.send_text(json.dumps({"type": "history", "messages": history}, default=str))
 
@@ -106,16 +116,29 @@ async def chatroom_websocket(websocket: WebSocket, token: str | None = None):
                 continue
 
             # Persist to DB
+            if not chat_limiter.allow(connection_key):
+                await websocket.send_text(json.dumps({
+                    "type": "error", "detail": "You are sending messages too quickly."
+                }))
+                continue
+
             sender_id = user.id if user else None
             if not sender_id:
-                # Guest: create ephemeral sender info in broadcast only
+                # A guest's display name is assigned here, from the connection.
+                #
+                # It used to be whatever the client put in the payload, and the
+                # server broadcast it unchanged — so anyone could open a socket
+                # without a token, set username to a real member's name, and post
+                # under it. Everyone in the room saw that member say it. The
+                # sender_id was "guest", but nothing in the interface shows a
+                # sender_id; it shows the name.
                 guest_payload = {
                     "type": "message",
                     "message": {
-                        "id": "guest",
+                        "id": f"guest-{connection_key}",
                         "sender_id": "guest",
-                        "sender_username": data.get("username", "Guest"),
-                        "sender_avatar": data.get("avatar", "⚪"),
+                        "sender_username": guest_name,
+                        "sender_avatar": "⚪",
                         "receiver_id": None,
                         "content": content,
                         "msg_type": "public",

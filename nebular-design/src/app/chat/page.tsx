@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { api, chatroomWsUrl, MessageOut, UserOut, FriendshipOut } from '@/lib/api';
+import BrickAvatar from '@/components/BrickAvatar';
 import {
   Send, Wifi, WifiOff, UserPlus, Check, Users,
   PanelRightClose, PanelRightOpen, Loader2,
@@ -20,21 +21,10 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function Avatar({ emoji, size = 36 }: { emoji: string; size?: number }) {
-  return (
-    <span
-      className="rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.5, background: 'rgba(247,209,23,0.24)' }}
-    >
-      {emoji}
-    </span>
-  );
-}
-
 function MessageBubble({ msg, isOwn }: { msg: MessageOut; isOwn: boolean }) {
   return (
     <div className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
-      <Avatar emoji={msg.sender_avatar} />
+      <BrickAvatar avatar={msg.sender_avatar} />
       <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%]`}>
         <div className="flex items-center gap-2 mb-1.5 px-1">
           <span className="font-bold text-xs text-lego-dark-gray">{msg.sender_username}</span>
@@ -170,7 +160,7 @@ export default function ChatPage() {
 
           <div className="border-t hairline bg-white/70 backdrop-blur-sm px-4 sm:px-6 py-4">
             <form onSubmit={sendMessage} className="flex gap-3 items-center">
-              <Avatar emoji={user?.avatar || '⚪'} size={38} />
+              <BrickAvatar avatar={user?.avatar || '⚪'} size={38} />
               <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)}
                 placeholder={`Message as ${user?.username || 'Guest'}…`}
                 className="input-soft flex-1" maxLength={500} autoComplete="off" />
@@ -208,7 +198,7 @@ export default function ChatPage() {
               {/* Current user */}
               {user && (
                 <div className="flex items-center gap-2.5 p-2 rounded-xl" style={{ background: 'rgba(247,209,23,0.16)' }}>
-                  <Avatar emoji={user.avatar} size={32} />
+                  <BrickAvatar avatar={user.avatar} size={32} />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-lego-black truncate">{user.username}</p>
                     <p className="text-xs text-lego-green font-semibold">You · Online</p>
@@ -222,7 +212,7 @@ export default function ChatPage() {
                 return (
                   <div key={m.name} className="p-2 rounded-xl hover:bg-black/[0.03] transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <Avatar emoji={m.avatar} size={32} />
+                      <BrickAvatar avatar={m.avatar} size={32} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-lego-black truncate">{m.name}</p>
                         <p className="text-xs font-semibold inline-flex items-center gap-1.5"

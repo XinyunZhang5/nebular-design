@@ -16,7 +16,13 @@ export default function Navbar() {
   }, [pathname]);
 
   const handleLogout = () => {
+    // Both keys. Removing only the profile made the UI look logged out while the
+    // bearer token stayed in localStorage — so on a shared machine the next
+    // person could read it out of devtools and keep using the account for the
+    // remaining seven days, and every API call this tab made afterwards was
+    // still authenticated.
     localStorage.removeItem('nebular_user');
+    localStorage.removeItem('nebular_token');
     setUser(null);
     window.location.href = '/';
   };

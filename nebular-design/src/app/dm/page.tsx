@@ -5,19 +5,11 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dmWsUrl, MessageOut, UserOut } from '@/lib/api';
 import { BrickStack, G, WALL } from '@/components/Bricks';
+import BrickAvatar from '@/components/BrickAvatar';
 import { ChevronLeft, Wifi, WifiOff, Send, Loader2 } from 'lucide-react';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function Avatar({ emoji, size = 36 }: { emoji: string; size?: number }) {
-  return (
-    <span className="rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.5, background: 'rgba(247,209,23,0.24)' }}>
-      {emoji}
-    </span>
-  );
 }
 
 function DMContent() {
@@ -87,7 +79,7 @@ function DMContent() {
           aria-label="Back to profile">
           <ChevronLeft size={18} />
         </Link>
-        <Avatar emoji={toAvatar} size={42} />
+        <BrickAvatar avatar={toAvatar} size={42} />
         <div>
           <h2 className="font-extrabold text-lg text-lego-black tracking-tight">{toName}</h2>
           <div className="flex items-center gap-1.5 text-xs font-medium"
@@ -116,7 +108,7 @@ function DMContent() {
           const isOwn = msg.sender_id === user.id;
           return (
             <div key={msg.id} className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
-              <Avatar emoji={msg.sender_avatar} size={34} />
+              <BrickAvatar avatar={msg.sender_avatar} size={34} />
               <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[72%]`}>
                 <div className="flex items-center gap-2 mb-1.5 px-1">
                   <span className="text-xs font-bold text-lego-dark-gray">{msg.sender_username}</span>
