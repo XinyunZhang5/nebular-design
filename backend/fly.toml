@@ -53,6 +53,15 @@ primary_region = "ord"
   auto_start_machines = true
   min_machines_running = 0
 
+  # `min_machines_running = 0` does NOT stop Fly from creating a second machine
+  # for high availability on the first deploy — that is `fly deploy --ha=false`,
+  # and the first deploy here made two before anyone noticed. Two 2 GB machines
+  # is twice the bill, and worse than that they do not share state: the rate
+  # limiter counts in process memory and the chat connections live in one
+  # process, so a message sent to one machine never reaches anyone on the other.
+  #   fly deploy --ha=false          # on a fresh app
+  #   fly scale count 1 --yes        # to fix it afterwards
+
   # One at a time. Two machines would each keep their own rate-limit counters
   # (app/ratelimit.py) and their own set of chat connections, so a message sent
   # to one would never reach anyone connected to the other. Scaling past this
