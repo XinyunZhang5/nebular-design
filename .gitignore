@@ -29,3 +29,7 @@ backend/uploads/
 
 # Claude settings
 .claude/
+
+# Local-only docs (deployment runbook + backlog, keep off GitHub)
+documentation/部署手册.md
+documentation/待办清单.md

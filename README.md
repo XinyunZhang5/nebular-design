@@ -186,27 +186,5 @@ backend/
 nebular-design/
   src/app/             upload, build/[id], profile, chat, dm, login, register
   src/components/      LegoViewer (three.js + LDraw), BuildDetail, Bricks
-documentation/         部署手册.md (deployment runbook), 待办清单.md (the honest backlog)
+documentation/         architecture, flows, permissions, environment variables
 ```
-
-## Status
-
-Live, and the whole path runs end to end: photo → segmentation → depth → 72-candidate search →
-refinement → parts list, steps and a spinnable 3D model, plus accounts, history, chat and DMs.
-
-Rough edges worth naming, in the order they will bite:
-
-- **Cold starts.** The API scales to zero to stay under a dollar a month, so the first request after a
-  quiet spell waits a few seconds for the machine. The vision models are baked into the image so that
-  this is seconds rather than a 130 MB download, but it is not nothing.
-- **The chat room does not survive that.** A held WebSocket keeps the machine awake, but once the last
-  person disconnects it stops, and reconnecting pays the cold start. There is no automatic reconnect
-  yet.
-- **No password reset.** It needs an outbound mail service and there isn't one. Deliberate, and
-  written down.
-- **Arches, cones and curved parts are in the library but unused.** The generator places slopes and
-  tiles. SNOT — sideways building — is not implemented at all, and it is the line between this and
-  what a person would build.
-
-All of that, with the reasoning and rough cost of fixing each, is in
-[`documentation/待办清单.md`](documentation/待办清单.md).
