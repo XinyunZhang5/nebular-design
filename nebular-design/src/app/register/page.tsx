@@ -22,7 +22,10 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    // Has to match schemas.py's MIN_PASSWORD. When the backend went from six to
+    // eight, this stayed at six — so a seven-character password passed the form,
+    // went to the server, and came back a 422 the page had no wording for.
+    if (form.password.length < 8) { setError('Password must be at least 8 characters'); return; }
     setLoading(true);
     try {
       const data = await api.auth.register({ ...form, avatar });
@@ -106,8 +109,8 @@ export default function RegisterPage() {
             <div className="flex flex-col gap-2">
               <label htmlFor="password" className="font-bold text-sm text-lego-black">Password</label>
               <div className="relative">
-                <input id="password" type={showPw ? 'text' : 'password'} required minLength={6} className="input-soft pr-12"
-                  placeholder="At least 6 characters" value={form.password}
+                <input id="password" type={showPw ? 'text' : 'password'} required minLength={8} className="input-soft pr-12"
+                  placeholder="At least 8 characters" value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })} />
                 <button type="button" onClick={() => setShowPw(v => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg text-lego-gray hover:text-lego-black hover:bg-black/5 transition-colors"

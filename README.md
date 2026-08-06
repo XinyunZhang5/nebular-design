@@ -5,55 +5,101 @@
 
 <div align="center">
 
+### [→ Try it live](https://nebular-design.vercel.app)
+
+**It's free, it's up, go throw a photo of a building at it and see what comes back.**
+Sign up takes ten seconds and there is no email to confirm. Have fun with it.
+
+<br>
+
 ![Next.js](https://img.shields.io/badge/Next.js-16-1C1C1C?style=flat-square&logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-1C1C1C?style=flat-square&logo=react&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-1C1C1C?style=flat-square&logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-asyncpg-1C1C1C?style=flat-square&logo=postgresql&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude-brick_matching-F7D117?style=flat-square&logo=anthropic&logoColor=1C1C1C)
+![Three.js](https://img.shields.io/badge/three.js-LDraw-1C1C1C?style=flat-square&logo=threedotjs&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude-names_the_build-F7D117?style=flat-square&logo=anthropic&logoColor=1C1C1C)
+
+<img src="docs/screenshots/home.png" alt="The Nebular Design home page" width="100%">
 
 </div>
 
 Upload a photo of a building. A depth model reads the flat image into a rough sense of its geometry,
-Claude maps that geometry onto real LEGO part numbers, and you get back a parts list with numbered
-assembly steps. Every build is saved to your profile, and there is a public chat room plus
-friend-to-friend messages so builders can compare notes on the same structure.
+a segmentation model decides which pixels are actually the building, and the two together are turned
+into a standing model built in courses of real LEGO parts — with a parts list, a colour palette,
+numbered assembly steps, and a 3D preview you can spin and replay course by course.
+
+**Every part number, quantity, colour and coordinate is computed, not guessed.** Claude reads the
+photograph too, but only to name the building and write the step titles. It is not allowed to touch a
+number.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/pipeline-dark.svg">
   <img src="docs/pipeline-light.svg" alt="Pipeline: photograph, read depth, match bricks, build it" width="100%">
 </picture>
 
-The depth model loads once into a thread pool, so a cold first request pays the model load and every
-request after it stays off the event loop. When `ANTHROPIC_API_KEY` is missing, or the Claude call
-fails, brick matching returns a bundled sample build instead of erroring, which keeps the whole
-upload flow clickable without a key.
+## What it actually produces
+
+Tower Bridge, from one photograph: **644 pieces, 51 × 27 × 2 cm**, chosen out of 72 candidate builds
+by a scorer that renders each one and compares it against the source.
+
+| Facade | Massing |
+| :---: | :---: |
+| <img src="docs/screenshots/facade.png" alt="The generated LEGO facade of Tower Bridge" width="100%"> | <img src="docs/screenshots/massing.png" alt="The same build seen as depth" width="100%"> |
+
+These are the renderer's own output, not mock-ups — they are what the scorer looks at when it decides
+which candidate wins.
+
+## How it decides
+
+The interesting part is the loop, not the model.
+
+**Search.** 72 candidates per photo, across stud resolution, relief depth, palette size, dithering and
+corbelling. Each is built, rendered, and scored. The best settings are wildly different from photo to
+photo, which is why they are searched for rather than configured.
+
+**Score.** Colour distance is CIEDE2000, measured at two scales at once — per cell and over a local
+neighbourhood. Per-cell alone rejected dithering outright, because dithering deliberately makes single
+cells wrong so that local averages come out right. A metric that cannot see a technique's benefit will
+always vote against it.
+
+**Multiply, don't weight.** Buildability and piece count are multipliers on the final score, not
+weighted terms. As terms, a model with thirty floating spans scored a couple of percent below one that
+stands up, and the search happily picked it for a marginal colour win. A model that will not stand is
+not a slightly worse model.
+
+**Refine.** The worst-scoring regions get extra palette weight and the build is recomputed. A round
+that does not improve the score is thrown away and logged as thrown away — the only way to tell a loop
+that helped from one that merely ran.
+
+## The brick library is measured, not remembered
+
+230 parts, with geometry read directly out of the official LDraw part files by
+`backend/scripts/measure_ldraw.py`, filtered by how often each appears across 1,547,624 rows of
+Rebrickable set inventory. Slopes, arches, wedges, cones, curved and round parts, tiles and panels.
+
+This was rebuilt from measurement after several rounds of trusting recalled dimensions, which produced
+slopes that read as flat and tiles at half their real height. Both were invisible until the geometry
+was sampled where the geometry actually is: LDraw has no single origin convention, so a part's
+dimensions cannot be inferred from its bounding box alone.
 
 ## Screenshots
 
-<!-- SCREENSHOT SLOTS. Drop your own PNGs into docs/screenshots/ and swap each src below.
-     Suggested width 1200px, any 16:10-ish crop.
-       upload.png        the drag-and-drop upload panel
-       parts.png         the result view: parts list, colour palette, total pieces
-       instructions.png  the numbered build steps
-       community.png     the chat room or a DM thread -->
-
-| Upload | Parts list |
+| Home | Sign up |
 | :---: | :---: |
-| <img src="https://placehold.co/960x600/F3F2EE/1C1C1C/png?text=Upload" alt="Upload panel" width="100%"> | <img src="https://placehold.co/960x600/F3F2EE/1C1C1C/png?text=Parts+list" alt="Parts list and colour palette" width="100%"> |
-| **Build steps** | **Community** |
-| <img src="https://placehold.co/960x600/F3F2EE/1C1C1C/png?text=Build+steps" alt="Numbered build steps" width="100%"> | <img src="https://placehold.co/960x600/F3F2EE/1C1C1C/png?text=Community" alt="Chat room" width="100%"> |
+| <img src="docs/screenshots/home.png" alt="Home page" width="100%"> | <img src="docs/screenshots/register.png" alt="Sign-up page with brick avatars" width="100%"> |
 
 ## Stack
 
 | Layer | What runs there |
 | --- | --- |
-| Frontend | Next.js 16 App Router, React 19, Tailwind CSS v4, Framer Motion, react-dropzone |
+| Frontend | Next.js 16 App Router, React 19, Tailwind CSS v4, three.js with the LDraw loader |
 | Backend | FastAPI, SQLAlchemy 2 async, PostgreSQL over asyncpg, WebSockets for chat and DMs |
-| Vision | `depth-anything/Depth-Anything-V2-Small-hf` through Transformers, on CPU |
-| Reasoning | Claude (`claude-sonnet-4-6`) for part matching and step generation |
-| Auth | JWT via python-jose, bcrypt password hashing |
-| Files | S3 when `USE_S3=true`, otherwise written to `backend/uploads` and served at `/static` |
-| Deploy | Vercel for the frontend, Railway for the API |
+| Vision | `Depth-Anything-V2-Small` and `SegFormer-B0` through Transformers, on CPU |
+| Geometry | NumPy — courses, slopes, glazing, corbelling, structural checks, LDraw emission |
+| Reasoning | Claude (`claude-sonnet-5`) for the building's name and step titles. Prose only |
+| Auth | JWT via python-jose, bcrypt hashing, token revocation, per-IP and per-account rate limits |
+| Storage | Cloudflare R2 (S3 API) for photos, renders and models; local disk when unconfigured |
+| Deploy | Vercel for the frontend, Fly.io for the API, Neon for Postgres |
 
 ## Run it locally
 
@@ -80,57 +126,87 @@ npm run dev                   # http://localhost:3000
 Tables are created on startup, so an empty database is fine. Point the frontend at a non-default API
 host with `NEXT_PUBLIC_API_URL`.
 
+**In Docker**, which is what actually ships:
+
+```bash
+cd backend && docker build -t nebular-api . && docker run -p 8000:8000 --env-file .env nebular-api
+```
+
+The build downloads and then *runs* both vision models, so a version mismatch fails the build rather
+than a production request.
+
 ### Environment
 
 | Variable | Default | Why you would change it |
 | --- | --- | --- |
-| `DATABASE_URL` | local `nebulardb` | `postgres://` and `postgresql://` are rewritten to asyncpg automatically |
-| `SECRET_KEY` | dev placeholder | must be a long random string in production |
-| `ANTHROPIC_API_KEY` | empty | without it, brick matching falls back to a bundled sample build |
-| `ENABLE_DEPTH_ESTIMATION` | `true` | set `false` to skip the model download in CI or low-memory environments |
-| `USE_S3` | `false` | `true` to store uploads in `S3_BUCKET_NAME` instead of on disk |
-| `FRONTEND_URL` | `http://localhost:3000` | comma-separated list of allowed CORS origins |
+| `DATABASE_URL` | local `nebulardb` | Paste a hosted URL as given — `postgres://`, `sslmode=` and `channel_binding=` are all translated for asyncpg |
+| `SECRET_KEY` | dev placeholder | Must be long and random in production, and the app refuses to start otherwise |
+| `ENV` | `development` | `production` turns on the startup checks and turns off the reloader |
+| `ANTHROPIC_API_KEY` | empty | Without it the build still computes; it just has no name or description |
+| `USE_S3` | `false` | `true` to store uploads in object storage instead of on disk |
+| `S3_ENDPOINT_URL` | empty | Set for Cloudflare R2. Empty means real AWS S3 |
+| `FRONTEND_URL` | `http://localhost:3000` | Comma-separated list of allowed CORS origins |
 
 ## API
 
-Everything lives under `/api`. Interactive docs are at `/docs` once the backend is up.
+Everything lives under `/api`. Interactive docs at `/docs` once the backend is up.
 
 | Method | Route | What it does |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | create an account, returns a JWT |
-| `POST` | `/api/auth/login` | exchange credentials for a JWT |
-| `POST` | `/api/images/upload` | upload a photo and kick off the depth plus brick pipeline |
-| `GET` | `/api/images/status/{project_id}` | poll one build for progress and results |
-| `GET` | `/api/images/history` | every build the signed-in user has made |
-| `POST` | `/api/friends/request` | send a friend request |
-| `POST` | `/api/friends/accept/{friendship_id}` | accept one |
-| `GET` | `/api/chat/messages` | recent public chat-room history |
-| `WS` | `/api/chat/ws/chatroom` | live public chat room |
-| `WS` | `/api/dm/ws/dm/{friend_id}` | live direct messages with one friend |
+| `POST` | `/api/auth/register` | Create an account, returns a JWT |
+| `POST` | `/api/auth/login` | Exchange credentials for a JWT. Rate limited per address and per account |
+| `POST` | `/api/auth/change-password` | Requires the current password; revokes every existing token |
+| `POST` | `/api/auth/logout-all` | Revokes every token for this user, including the caller's |
+| `POST` | `/api/images/upload` | Upload a photo and run the whole pipeline |
+| `GET` | `/api/images/status/{id}` | One build, with its parts list and steps |
+| `GET` | `/api/images/{id}/ldraw` | The LDraw model, fetched separately because it is 80 KB |
+| `GET` | `/api/images/history` | Every build the signed-in user has made |
+| `POST` | `/api/friends/request` | Send a friend request |
+| `GET` | `/api/chat/messages` | Recent public chat-room history |
+| `WS` | `/api/chat/ws/chatroom` | Live public chat room |
+| `WS` | `/api/dm/ws/dm/{friend_id}` | Live direct messages |
 
 ## Repository layout
 
 ```
 backend/
-  app/routers/        auth, images, friends, chat, dm
-  app/services/       depth.py (Depth Anything), bricks.py (Claude), s3.py
-  app/models.py       users, projects, friendships, messages
-  run.py              uvicorn entrypoint
+  app/routers/         auth, images, friends, chat, dm
+  app/services/
+    legolize.py        the pipeline: courses, colour, slopes, structure, search, refinement
+    score.py           CIEDE2000 at two scales, buildability, size
+    lego_shapes.py     230 parts, generated from measured LDraw geometry
+    ldraw.py           emit a .ldr the viewer and BrickLink Studio both read
+    depth.py           Depth Anything V2
+    segment.py         SegFormer / ADE20K
+    bricks.py          the one Claude call
+    storage.py         R2 / S3 / local disk
+  scripts/             measure_ldraw.py, build_shape_library.py, prefetch_models.py
+  Dockerfile           models baked in, so a cold start is seconds not a download
+  fly.toml             2 GB, scale-to-zero
 nebular-design/
-  src/app/            upload, profile, chat, dm, login, register
-  src/components/     Navbar, Bricks
-  src/lib/api.ts      typed fetch wrapper, JWT from localStorage
-docs/                 README artwork and screenshots
-plan.txt              the original scope, user stories, acceptance criteria
+  src/app/             upload, build/[id], profile, chat, dm, login, register
+  src/components/      LegoViewer (three.js + LDraw), BuildDetail, Bricks
+documentation/         部署手册.md (deployment runbook), 待办清单.md (the honest backlog)
 ```
 
 ## Status
 
-The full path from photo to parts list to build steps runs end to end, along with accounts, build
-history, the public chat room, friends, and DMs. Rough edges worth naming:
+Live, and the whole path runs end to end: photo → segmentation → depth → 72-candidate search →
+refinement → parts list, steps and a spinnable 3D model, plus accounts, history, chat and DMs.
 
-- Depth estimation runs on CPU, so the first upload after a cold start is slow while the model loads.
-- Part matching is only as good as the model's LEGO knowledge. Part numbers are plausible rather than
-  verified against a live catalogue.
-- There is no 3D preview yet. The output is a parts list plus written steps, which was the deliberate
-  scope cut in `plan.txt`.
+Rough edges worth naming, in the order they will bite:
+
+- **Cold starts.** The API scales to zero to stay under a dollar a month, so the first request after a
+  quiet spell waits a few seconds for the machine. The vision models are baked into the image so that
+  this is seconds rather than a 130 MB download, but it is not nothing.
+- **The chat room does not survive that.** A held WebSocket keeps the machine awake, but once the last
+  person disconnects it stops, and reconnecting pays the cold start. There is no automatic reconnect
+  yet.
+- **No password reset.** It needs an outbound mail service and there isn't one. Deliberate, and
+  written down.
+- **Arches, cones and curved parts are in the library but unused.** The generator places slopes and
+  tiles. SNOT — sideways building — is not implemented at all, and it is the line between this and
+  what a person would build.
+
+All of that, with the reasoning and rough cost of fixing each, is in
+[`documentation/待办清单.md`](documentation/待办清单.md).
