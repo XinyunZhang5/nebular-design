@@ -5,9 +5,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { BrickStack, G } from '@/components/Bricks';
+import BrickAvatar from '@/components/BrickAvatar';
+import { AVATAR_KEYS } from '@/components/brickAvatars';
 import { CircleAlert, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
 
-const AVATARS = ['🟡', '🔵', '🟢', '🔴', '🟠', '🟣', '⚫', '🟤'];
+const AVATARS = AVATAR_KEYS;
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -69,14 +71,22 @@ export default function RegisterPage() {
                   const on = avatar === a;
                   return (
                     <button key={a} type="button" onClick={() => setAvatar(a)}
-                      className="w-11 h-11 rounded-full text-xl flex items-center justify-center transition-all"
+                      className="group relative w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-200 ease-out"
                       style={{
-                        background: on ? 'rgba(247,209,23,0.9)' : 'rgba(28,28,28,0.05)',
-                        boxShadow: on ? '0 0 0 2px #1C1C1C' : 'none',
-                        transform: on ? 'translateY(-1px)' : 'none',
+                        background: on ? 'rgba(247,209,23,0.92)' : 'rgba(28,28,28,0.045)',
+                        boxShadow: on ? 'inset 0 0 0 2px #1C1C1C' : 'inset 0 0 0 1px rgba(28,28,28,0.06)',
                       }}
                       aria-label={`Avatar ${a}`} aria-pressed={on}>
-                      {a}
+                      <BrickAvatar
+                        avatar={a}
+                        size={40}
+                        shadow={false}
+                        // Lifting the brick rather than the tile keeps the tray
+                        // still and makes the selected piece read as picked up.
+                        className={`transition-transform duration-200 ease-out ${
+                          on ? '-translate-y-1 scale-105' : 'group-hover:-translate-y-0.5'
+                        }`}
+                      />
                     </button>
                   );
                 })}

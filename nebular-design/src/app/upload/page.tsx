@@ -4,47 +4,10 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { api, AnalysisResult } from '@/lib/api';
 import { BrickStack, G, WALL } from '@/components/Bricks';
+import BuildDetail, { hexToRgba } from '@/components/BuildDetail';
 import {
-  ImageUp, Check, RefreshCw, Sparkles, Printer, ScanLine, Cpu, Cloud,
-  Layers, Lightbulb, Boxes, Clock,
+  ImageUp, Check, RefreshCw, Sparkles, Printer, ScanLine, Cpu, Cloud, Layers,
 } from 'lucide-react';
-
-const DIFFICULTY_COLORS: Record<string, string> = {
-  Beginner: '#007934', Intermediate: '#FF6B00', Expert: '#E3000B',
-  Medium: '#FF6B00', Hard: '#E3000B',
-};
-
-const LEGO_COLOR_HEX: Record<string, string> = {
-  White: '#FFFFFF', 'Light Bluish Gray': '#AFB5C7', 'Dark Bluish Gray': '#595D6E',
-  Black: '#1C1C1C', Red: '#E3000B', Blue: '#006DB7', Yellow: '#F7D117',
-  Green: '#007934', Orange: '#FF6B00', Transparent: '#E8F4FD', 'Trans-Clear': '#E8F4FD',
-  Tan: '#E6C99A', Brown: '#4B2E1A', 'Light Gray': '#D0D0D0', 'Dark Gray': '#595D6E',
-};
-
-function hexToRgba(hex: string, a: number) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
-
-function DifficultyBadge({ level }: { level: string }) {
-  const c = DIFFICULTY_COLORS[level] || '#4A4A4A';
-  return (
-    <span className="badge-soft" style={{ background: hexToRgba(c, 0.14), color: c }}>
-      {level}
-    </span>
-  );
-}
-
-function ColorSwatch({ color }: { color: string }) {
-  const hex = LEGO_COLOR_HEX[color] || '#CCCCCC';
-  return (
-    <span className="inline-flex items-center gap-2 pl-2 pr-3 py-1 rounded-full text-xs font-bold text-lego-black"
-      style={{ background: 'rgba(28,28,28,0.05)' }}>
-      <span className="w-3.5 h-3.5 rounded-full border border-black/15" style={{ background: hex }} />
-      {color}
-    </span>
-  );
-}
 
 const STEP_LABELS = ['Upload', 'Analyzing', 'Results'];
 
@@ -88,8 +51,9 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [buildName, setBuildName] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'bricks' | 'steps'>('bricks');
 
   const onDrop = useCallback((accepted: File[]) => {
     const f = accepted[0]; if (!f) return;
@@ -101,7 +65,7 @@ export default function UploadPage() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'] },
-    maxSize: 15 * 1024 * 1024,
+    maxSize: 50 * 1024 * 1024,
     multiple: false,
   });
 
@@ -129,8 +93,12 @@ export default function UploadPage() {
       clearInterval(interval);
       setProgress(100);
 
+      setProjectId(project.id);
       if (project.image_url) setImageUrl(project.image_url);
       if (project.result_json) setResult(project.result_json);
+      // Claude's name is the starting point, not the stored one — `project.name`
+      // stays null until the builder actually types something.
+      setBuildName(project.name ?? project.result_json?.buildingName ?? null);
 
       setTimeout(() => setStep(2), 400);
     } catch (err) {
@@ -143,10 +111,24 @@ export default function UploadPage() {
   const handleReset = () => {
     setStep(0); setPreview(null); setFile(null);
     setProgress(0); setResult(null); setImageUrl(null); setError('');
+    setProjectId(null); setBuildName(null);
   };
 
+  const handleRename = async (name: string) => {
+    setBuildName(name);  // optimistic — a rename that fails is not worth a modal
+    if (!projectId) return;
+    try {
+      await api.images.rename(projectId, name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that name');
+    }
+  };
+
+  // Local-storage mode returns a /static/ path relative to the API, not the
+  // frontend. Hardcoding the port here broke as soon as the API moved off 8000.
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const displayImage = imageUrl
-    ? (imageUrl.startsWith('/static/') ? `http://localhost:8000${imageUrl}` : imageUrl)
+    ? (imageUrl.startsWith('/static/') ? `${apiBase}${imageUrl}` : imageUrl)
     : preview;
 
   return (
@@ -201,7 +183,7 @@ export default function UploadPage() {
                 </div>
                 <p className="text-lego-dark-gray font-medium mb-7">Drag and drop, or click to browse</p>
                 <span className="btn-pill btn-pill-sm mx-auto">Browse files</span>
-                <p className="text-lego-gray text-sm font-medium mt-5">JPG, PNG, WebP · up to 15 MB</p>
+                <p className="text-lego-gray text-sm font-medium mt-5">JPG, PNG, WebP · up to 50 MB</p>
               </div>
             ) : (
               <div className="card-soft p-6">
@@ -298,129 +280,28 @@ export default function UploadPage() {
           </div>
         )}
 
-        {/* STEP 2 — results */}
-        {step === 2 && result && (
-          <div className="space-y-6 animate-fade-up">
-            {/* Summary */}
-            <div className="card-soft p-7">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-                <div>
-                  <div className="eyebrow-min mb-2">Your build</div>
-                  <h2 className="font-extrabold text-3xl text-lego-black tracking-tight">{result.buildingName}</h2>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    <DifficultyBadge level={result.difficulty} />
-                    <span className="badge-soft"><Boxes size={14} strokeWidth={2.2} /> {result.estimatedPieceCount} pieces</span>
-                    <span className="badge-soft"><Clock size={14} strokeWidth={2.2} /> {result.estimatedTime}</span>
-                  </div>
+        {/* STEP 2 — results. The same view the profile shows, from one component:
+            a build that could only be seen fully on the screen that made it was the
+            whole complaint. */}
+        {step === 2 && result && projectId && (
+          <div className="animate-fade-up">
+            <BuildDetail
+              result={result}
+              projectId={projectId}
+              title={buildName && buildName !== 'Untitled Structure' ? buildName : null}
+              photoUrl={displayImage}
+              onRename={handleRename}
+              footer={
+                <div className="flex flex-wrap gap-4 justify-center pt-4">
+                  <button onClick={handleReset} className="btn-pill">
+                    <RefreshCw size={16} strokeWidth={2.4} /> Analyze another photo
+                  </button>
+                  <button onClick={() => window.print()} className="btn-pill-outline">
+                    <Printer size={16} strokeWidth={2.2} /> Print brick list
+                  </button>
                 </div>
-                {displayImage && (
-                  <div className="w-full sm:w-32 h-24 rounded-2xl overflow-hidden flex-shrink-0"
-                    style={{ boxShadow: '0 12px 24px rgba(28,28,28,0.10)' }}>
-                    <img src={displayImage} alt="Your building" className="w-full h-full object-cover" />
-                  </div>
-                )}
-              </div>
-              {result.colorPalette?.length > 0 && (
-                <div className="mt-6 pt-6 border-t hairline">
-                  <p className="font-bold text-sm text-lego-black mb-3">Colour palette</p>
-                  <div className="flex flex-wrap gap-2">
-                    {result.colorPalette.map(c => <ColorSwatch key={c} color={c} />)}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Tabs */}
-            <div className="flex items-center gap-7 border-b hairline">
-              <button onClick={() => setActiveTab('bricks')} data-active={activeTab === 'bricks'} className="tab-underline">
-                Brick list ({result.bricks.length})
-              </button>
-              <button onClick={() => setActiveTab('steps')} data-active={activeTab === 'steps'} className="tab-underline">
-                Assembly steps ({result.steps.length})
-              </button>
-            </div>
-
-            {activeTab === 'bricks' && (
-              <div className="card-soft overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-lego-gray">
-                        <th className="px-5 py-3.5 font-bold text-xs uppercase tracking-wider">#</th>
-                        <th className="px-5 py-3.5 font-bold text-xs uppercase tracking-wider">Brick</th>
-                        <th className="px-5 py-3.5 font-bold text-xs uppercase tracking-wider hidden sm:table-cell">Part ID</th>
-                        <th className="px-5 py-3.5 font-bold text-xs uppercase tracking-wider">Colour</th>
-                        <th className="px-5 py-3.5 font-bold text-xs uppercase tracking-wider text-right">Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y hairline">
-                      {result.bricks.map((brick, i) => (
-                        <tr key={i} className="transition-colors hover:bg-lego-yellow/[0.07]">
-                          <td className="px-5 py-4 font-semibold text-lego-gray">{i + 1}</td>
-                          <td className="px-5 py-4">
-                            <div className="font-bold text-lego-black">{brick.name}</div>
-                            <div className="text-xs text-lego-gray font-medium hidden sm:block">{brick.description}</div>
-                          </td>
-                          <td className="px-5 py-4 font-mono text-xs text-lego-dark-gray hidden sm:table-cell">{brick.partId}</td>
-                          <td className="px-5 py-4"><ColorSwatch color={brick.color} /></td>
-                          <td className="px-5 py-4 text-right font-extrabold text-lego-black tabular-nums">{brick.quantity}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t hairline bg-lego-yellow/[0.14]">
-                        <td colSpan={4} className="px-5 py-4 font-bold text-lego-black">Total pieces</td>
-                        <td className="px-5 py-4 text-right font-extrabold text-lg text-lego-black tabular-nums">
-                          {result.bricks.reduce((s, b) => s + b.quantity, 0)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'steps' && (
-              <div className="space-y-4">
-                {result.steps.map((s, i) => (
-                  <div key={i} className="card-soft p-6">
-                    <div className="flex gap-4 items-start">
-                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-extrabold text-lego-black text-lg flex-shrink-0"
-                        style={{ background: hexToRgba('#F7D117', 0.9) }}>
-                        {s.step}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-extrabold text-lego-black text-lg">{s.title}</h3>
-                        <p className="text-lego-dark-gray font-medium mt-1 leading-relaxed">{s.description}</p>
-                        {s.bricksUsed?.length > 0 && (
-                          <div className="mt-3.5 flex flex-wrap gap-2">
-                            {s.bricksUsed.map((b, j) => (
-                              <span key={j} className="badge-soft"><Boxes size={13} strokeWidth={2.2} /> {b}</span>
-                            ))}
-                          </div>
-                        )}
-                        {s.tip && (
-                          <div className="mt-4 flex items-start gap-2.5 px-4 py-3 rounded-2xl"
-                            style={{ background: hexToRgba('#F7D117', 0.14) }}>
-                            <Lightbulb size={16} strokeWidth={2.2} className="text-lego-black mt-0.5 flex-shrink-0" />
-                            <p className="text-sm font-semibold text-lego-black leading-relaxed">{s.tip}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-4 justify-center pt-4">
-              <button onClick={handleReset} className="btn-pill">
-                <RefreshCw size={16} strokeWidth={2.4} /> Analyze another photo
-              </button>
-              <button onClick={() => window.print()} className="btn-pill-outline">
-                <Printer size={16} strokeWidth={2.2} /> Print brick list
-              </button>
-            </div>
+              }
+            />
           </div>
         )}
       </div>

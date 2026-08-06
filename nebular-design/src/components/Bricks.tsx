@@ -182,12 +182,17 @@ export function BrickStack({
   ns,
   className = '',
   style,
+  padScale = 0.65,
 }: {
   bricks: BrickSpec[];
   unit?: number;
   ns: string;
   className?: string;
   style?: React.CSSProperties;
+  /** Breathing room around the stack, as a multiple of `unit`. The default suits
+   *  hero marks that float on a page; small fixed-size uses like avatars want
+   *  much less, or the brick shrinks to a dot inside its box. */
+  padScale?: number;
 }) {
   const order = bricks
     .map((b, i) => ({ b, i }))
@@ -195,7 +200,7 @@ export function BrickStack({
   const allPts = bricks.flatMap((b) => brickExtent(b, unit));
   const xs = allPts.map((p) => p[0]);
   const ys = allPts.map((p) => p[1]);
-  const pad = unit * 0.65;
+  const pad = unit * padScale;
   const minX = Math.min(...xs) - pad;
   const minY = Math.min(...ys) - pad;
   const vbW = Math.max(...xs) - minX + pad;

@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, UserOut, Project, FriendshipOut } from '@/lib/api';
+import { api, buildTitle, UserOut, Project, FriendshipOut } from '@/lib/api';
 import { BrickStack, G, WALL } from '@/components/Bricks';
+import BrickAvatar from '@/components/BrickAvatar';
 import {
   Plus, Boxes, Users, UserPlus, MessageCircle, Trash2, X, Clock,
   Check, Loader2, Building2, Inbox, Send,
@@ -29,17 +30,6 @@ function DifficultyBadge({ level, className = '' }: { level: string; className?:
   );
 }
 
-function Avatar({ emoji, size = 40, radius = 14 }: { emoji: string; size?: number; radius?: number }) {
-  return (
-    <span
-      className="flex items-center justify-center flex-shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.5, borderRadius: radius, background: 'rgba(247,209,23,0.24)' }}
-    >
-      {emoji}
-    </span>
-  );
-}
-
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return 'just now';
@@ -56,7 +46,6 @@ export default function ProfilePage() {
   const [addTarget, setAddTarget] = useState('');
   const [addStatus, setAddStatus] = useState('');
   const [activeTab, setActiveTab] = useState<'builds' | 'friends'>('builds');
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -90,6 +79,12 @@ export default function ProfilePage() {
     setFriendships(f);
   };
 
+  const reject = async (id: string) => {
+    await api.friends.reject(id);
+    const f = await api.friends.list();
+    setFriendships(f);
+  };
+
   const remove = async (id: string) => {
     await api.friends.remove(id);
     const f = await api.friends.list();
@@ -116,9 +111,9 @@ export default function ProfilePage() {
       {/* Header */}
       <div className="border-b hairline">
         <div className="max-w-5xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl brick-shadow"
-            style={{ background: 'rgba(247,209,23,0.9)' }}>
-            {user.avatar}
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(247,209,23,0.9)', boxShadow: 'inset 0 0 0 1px rgba(28,28,28,0.08)' }}>
+            <BrickAvatar avatar={user.avatar} size={58} />
           </div>
           <div className="flex-1">
             <div className="eyebrow-min mb-1.5">Profile</div>
@@ -176,17 +171,16 @@ export default function ProfilePage() {
                   ? `${API_URL}${p.image_url}` : p.image_url;
                 const result = p.result_json;
                 return (
-                  <div key={p.id} className="card-soft card-hover overflow-hidden cursor-pointer"
-                    onClick={() => setSelectedProject(p)}>
+                  <Link key={p.id} href={`/build/${p.id}`} className="card-soft card-hover overflow-hidden block">
                     <div className="h-40 bg-lego-light-gray overflow-hidden">
                       {imgSrc
-                        ? <img src={imgSrc} alt={result?.buildingName || ''} className="w-full h-full object-cover" />
+                        ? <img src={imgSrc} alt={buildTitle(p) || ''} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-lego-gray"><Building2 size={32} /></div>}
                     </div>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2">
                         <h4 className="font-extrabold text-lego-black leading-tight">
-                          {result?.buildingName || 'Unnamed build'}
+                          {buildTitle(p) || 'Untitled build'}
                         </h4>
                         {result?.difficulty && <DifficultyBadge level={result.difficulty} className="flex-shrink-0 !text-[11px] !px-2.5 !py-1" />}
                       </div>
@@ -198,7 +192,7 @@ export default function ProfilePage() {
                       )}
                       <p className="text-lego-gray text-xs font-medium mt-1.5">{timeAgo(p.created_at)}</p>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -239,7 +233,7 @@ export default function ProfilePage() {
                 <div className="space-y-2">
                   {pendingReceived.map(f => (
                     <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: 'rgba(247,209,23,0.12)' }}>
-                      <Avatar emoji={f.friend.avatar} radius={999} />
+                      <BrickAvatar avatar={f.friend.avatar} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
                         <p className="text-xs text-lego-dark-gray font-medium">想加你为好友</p>
@@ -248,7 +242,7 @@ export default function ProfilePage() {
                         <button onClick={() => accept(f.id)} className="btn-pill" style={{ padding: '8px 16px', fontSize: 13 }}>
                           <Check size={14} strokeWidth={3} /> Accept
                         </button>
-                        <button onClick={() => remove(f.id)}
+                        <button onClick={() => reject(f.id)}
                           className="w-9 h-9 flex items-center justify-center rounded-full border border-black/10 text-lego-dark-gray hover:bg-black/5 transition-colors"
                           aria-label="Decline">
                           <X size={16} />
@@ -269,7 +263,7 @@ export default function ProfilePage() {
                 <div className="space-y-1">
                   {accepted.map(f => (
                     <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-black/[0.03] transition-colors">
-                      <Avatar emoji={f.friend.avatar} radius={999} />
+                      <BrickAvatar avatar={f.friend.avatar} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
                         <p className="text-xs text-lego-green font-semibold inline-flex items-center gap-1.5">
@@ -302,7 +296,7 @@ export default function ProfilePage() {
                 <div className="space-y-1">
                   {pendingSent.map(f => (
                     <div key={f.id} className="flex items-center gap-3 p-3 rounded-2xl bg-black/[0.02]">
-                      <Avatar emoji={f.friend.avatar} radius={999} />
+                      <BrickAvatar avatar={f.friend.avatar} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
                         <p className="text-xs text-lego-gray font-medium">等待对方接受…</p>
@@ -332,56 +326,6 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Project modal */}
-      {selectedProject && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setSelectedProject(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
-            style={{ boxShadow: '0 40px 80px rgba(28,28,28,0.28)' }}
-            onClick={e => e.stopPropagation()}>
-            <div className="p-6 flex items-start justify-between gap-4">
-              <div>
-                <div className="eyebrow-min mb-1.5">Build</div>
-                <h3 className="font-extrabold text-2xl text-lego-black tracking-tight">
-                  {selectedProject.result_json?.buildingName || 'Build'}
-                </h3>
-                <p className="text-sm font-medium text-lego-gray mt-0.5">{timeAgo(selectedProject.created_at)}</p>
-              </div>
-              <button onClick={() => setSelectedProject(null)}
-                className="w-9 h-9 flex items-center justify-center rounded-full border border-black/10 text-lego-dark-gray hover:bg-black/5 transition-colors flex-shrink-0"
-                aria-label="Close">
-                <X size={18} />
-              </button>
-            </div>
-            {selectedProject.image_url && (
-              <div className="px-6">
-                <div className="rounded-2xl overflow-hidden" style={{ boxShadow: '0 14px 30px rgba(28,28,28,0.12)' }}>
-                  <img
-                    src={selectedProject.image_url.startsWith('/static/')
-                      ? `${API_URL}${selectedProject.image_url}` : selectedProject.image_url}
-                    alt="" className="w-full h-52 object-cover" />
-                </div>
-              </div>
-            )}
-            {selectedProject.result_json && (
-              <div className="p-6">
-                <div className="flex flex-wrap gap-2 mb-5">
-                  <span className="badge-soft"><Boxes size={14} strokeWidth={2.2} /> {selectedProject.result_json.estimatedPieceCount} pieces</span>
-                  <span className="badge-soft"><Clock size={14} strokeWidth={2.2} /> {selectedProject.result_json.estimatedTime}</span>
-                  <DifficultyBadge level={selectedProject.result_json.difficulty} />
-                </div>
-                {selectedProject.depth_data && !('skipped' in selectedProject.depth_data) && (
-                  <div className="p-4 rounded-2xl text-xs font-mono text-lego-dark-gray" style={{ background: 'rgba(28,28,28,0.04)' }}>
-                    <p className="font-bold text-lego-black mb-1.5 not-italic" style={{ fontFamily: 'inherit' }}>Depth analysis · DepthAnything V2</p>
-                    <p>Mean depth: {String(selectedProject.depth_data.mean_depth ?? '-')} · Edge strength: {String(selectedProject.depth_data.edge_strength ?? '-')}</p>
-                    <p>Zone: {String(selectedProject.depth_data.dominant_depth_zone ?? '-')} · Complexity: {String(selectedProject.depth_data.geometric_complexity ?? '-')}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
