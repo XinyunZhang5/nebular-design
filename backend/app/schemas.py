@@ -1,9 +1,27 @@
 from datetime import datetime
 from typing import Any
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ---- Auth ----
+
+# Eight, not six. Six lowercase letters is about three hundred million
+# combinations, which a rented GPU works through in seconds if the hashes ever
+# leak; the rate limiter protects the login endpoint but not a stolen database.
+MIN_PASSWORD = 8
+
+# bcrypt reads at most 72 bytes and silently ignores the rest, so "correct horse
+# battery staple ..." past that length adds nothing. Rejecting is honest;
+# truncating would mean two different passwords open the same account.
+MAX_PASSWORD_BYTES = 72
+
+
+def check_password(v: str) -> str:
+    if len(v) < MIN_PASSWORD:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD} characters")
+    if len(v.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise ValueError("Password is too long (72 bytes max)")
+    return v
 
 class RegisterRequest(BaseModel):
     username: str
@@ -22,14 +40,25 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def password_valid(cls, v: str) -> str:
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters")
-        return v
+        return check_password(v)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
+    # Deliberately unvalidated. Applying the strength rules here would reject an
+    # old password that no longer meets them, locking out the very accounts that
+    # most need to sign in and change it.
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_valid(cls, v: str) -> str:
+        return check_password(v)
 
 
 class UserOut(BaseModel):
@@ -54,11 +83,16 @@ class ProjectOut(BaseModel):
     id: str
     user_id: str
     image_url: str
+    name: str | None = None
     result_json: dict[str, Any] | None
     depth_data: dict[str, Any] | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProjectRenameBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
 
 
 # ---- Friends ----

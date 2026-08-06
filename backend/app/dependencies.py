@@ -33,6 +33,15 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # The whole point of storing a version on the row: a token minted before a
+    # password change or a "log out everywhere" carries the old number and stops
+    # working here. Tokens issued before this field existed have no `tv` claim at
+    # all, and default to 0 — which matches every existing row, so nobody is
+    # signed out by the upgrade itself.
+    if payload.get("tv", 0) != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session ended. Please sign in again."
+        )
     return user
 
 
