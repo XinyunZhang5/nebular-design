@@ -1,0 +1,20 @@
+# Secrets. The image is a file anyone with pull access can unpack — a .env baked
+# into a layer stays there even if a later layer deletes it.
+.env
+*.env
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local object-storage fallback. These are the developer's own test uploads and
+# have no business in a production image.
+uploads/
+
+# Debug harness: a second FastAPI app that loads several segmentation models at
+# once to compare them. Not wanted in the deployed image.
+tools/
+
+*.log
+.DS_Store

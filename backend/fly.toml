@@ -1,0 +1,71 @@
+# Nebular Design — backend, on Fly.io.
+#
+# Budget: under $10/month, all in. That is met by never running a machine nobody
+# is using. A stopped machine bills only its root filesystem ($0.15/GB/30 days),
+# so this sits at roughly a dollar a month instead of the eleven that a 2 GB
+# machine costs to leave switched on.
+#
+# `fly launch` will rewrite this file if run without --no-config. Prefer
+# `fly deploy` once the app exists.
+
+app = "nebular-design-api"
+
+# ord is Chicago, chosen to sit next to the database: Neon is on AWS us-east-2,
+# which is Columbus, Ohio, and Fly has no Ohio region. Chicago is the nearest
+# thing to it — about 10 ms — and iad (Ashburn) would be roughly 15. Every
+# request makes several round trips to Postgres, so this is the one placement
+# decision worth getting right; it also happens to be the closest region to
+# Illinois.
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENV = "production"
+  PORT = "8000"
+  USE_S3 = "true"
+  # Secrets — DATABASE_URL, SECRET_KEY, ANTHROPIC_API_KEY, the R2 credentials,
+  # FRONTEND_URL — are NOT here. This file is committed; `fly secrets set` keeps
+  # them encrypted and injects them as environment variables at boot.
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+
+  # The scale-to-zero pair. Fly stops the machine after a few idle minutes and
+  # starts it again on the next request.
+  #
+  # What this costs: a cold start is a container boot plus this app's startup —
+  # a few seconds, paid by whoever arrives first after a quiet spell. The models
+  # are baked into the image (see Dockerfile) precisely so that this is seconds
+  # and not half a minute.
+  #
+  # What it breaks: WebSocket chat. A held connection counts as active traffic,
+  # so the machine will not stop out from under a conversation in progress — but
+  # once the last person disconnects it stops, and reconnecting pays the cold
+  # start again. Documented in documentation/待办清单.md as A2, accepted for now.
+  #
+  # "suspend" instead of "stop" would resume from a memory snapshot in well under
+  # a second. It is worth trying once this is running; "stop" is the version with
+  # no caveats about machine size.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # One at a time. Two machines would each keep their own rate-limit counters
+  # (app/ratelimit.py) and their own set of chat connections, so a message sent
+  # to one would never reach anyone connected to the other. Scaling past this
+  # needs Redis first — backlog items C5 and B5.
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 25
+    soft_limit = 20
+
+# 2 GB because the analysis pipeline peaks at about 1.4 GB with both vision
+# models resident. It is the single largest cost in this setup, and the way to
+# remove it is backlog item D3 — run depth and segmentation in the browser,
+# which would leave the server needing about 250 MB.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "2gb"
