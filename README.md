@@ -42,12 +42,10 @@ number.
 Tower Bridge, from one photograph: **644 pieces, 51 × 27 × 2 cm**, chosen out of 72 candidate builds
 by a scorer that renders each one and compares it against the source.
 
-| Facade | Massing |
-| :---: | :---: |
-| <img src="docs/screenshots/facade.png" alt="The generated LEGO facade of Tower Bridge" width="100%"> | <img src="docs/screenshots/massing.png" alt="The same build seen as depth" width="100%"> |
-
-These are the renderer's own output, not mock-ups — they are what the scorer looks at when it decides
-which candidate wins.
+Whatever building you upload, what comes back is the same shape of thing: a buildable LEGO version of
+it — the real parts list with quantities and colours, the whole model broken into numbered assembly
+steps you can follow course by course, a 3D preview you can spin, and an `.ldr` file that opens in
+BrickLink Studio if you want to take it further.
 
 ## How it decides
 
