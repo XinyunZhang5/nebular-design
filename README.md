@@ -103,17 +103,13 @@ dimensions cannot be inferred from its bounding box alone.
 
 Node 20 or newer, Python 3.12 or newer, and a PostgreSQL database.
 
-**Backend**
-
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # fill in DATABASE_URL and ANTHROPIC_API_KEY
-python run.py                 # http://localhost:8000, interactive docs at /docs
+cp .env.example .env          # every setting is listed there, with a note on what it does
+python run.py                 # http://localhost:8000
 ```
-
-**Frontend**
 
 ```bash
 cd nebular-design
@@ -121,48 +117,9 @@ npm install
 npm run dev                   # http://localhost:3000
 ```
 
-Tables are created on startup, so an empty database is fine. Point the frontend at a non-default API
-host with `NEXT_PUBLIC_API_URL`.
-
-**In Docker**, which is what actually ships:
-
-```bash
-cd backend && docker build -t nebular-api . && docker run -p 8000:8000 --env-file .env nebular-api
-```
-
-The build downloads and then *runs* both vision models, so a version mismatch fails the build rather
-than a production request.
-
-### Environment
-
-| Variable | Default | Why you would change it |
-| --- | --- | --- |
-| `DATABASE_URL` | local `nebulardb` | Paste a hosted URL as given — `postgres://`, `sslmode=` and `channel_binding=` are all translated for asyncpg |
-| `SECRET_KEY` | dev placeholder | Must be long and random in production, and the app refuses to start otherwise |
-| `ENV` | `development` | `production` turns on the startup checks and turns off the reloader |
-| `ANTHROPIC_API_KEY` | empty | Without it the build still computes; it just has no name or description |
-| `USE_S3` | `false` | `true` to store uploads in object storage instead of on disk |
-| `S3_ENDPOINT_URL` | empty | Set for Cloudflare R2. Empty means real AWS S3 |
-| `FRONTEND_URL` | `http://localhost:3000` | Comma-separated list of allowed CORS origins |
-
-## API
-
-Everything lives under `/api`. Interactive docs at `/docs` once the backend is up.
-
-| Method | Route | What it does |
-| --- | --- | --- |
-| `POST` | `/api/auth/register` | Create an account, returns a JWT |
-| `POST` | `/api/auth/login` | Exchange credentials for a JWT. Rate limited per address and per account |
-| `POST` | `/api/auth/change-password` | Requires the current password; revokes every existing token |
-| `POST` | `/api/auth/logout-all` | Revokes every token for this user, including the caller's |
-| `POST` | `/api/images/upload` | Upload a photo and run the whole pipeline |
-| `GET` | `/api/images/status/{id}` | One build, with its parts list and steps |
-| `GET` | `/api/images/{id}/ldraw` | The LDraw model, fetched separately because it is 80 KB |
-| `GET` | `/api/images/history` | Every build the signed-in user has made |
-| `POST` | `/api/friends/request` | Send a friend request |
-| `GET` | `/api/chat/messages` | Recent public chat-room history |
-| `WS` | `/api/chat/ws/chatroom` | Live public chat room |
-| `WS` | `/api/dm/ws/dm/{friend_id}` | Live direct messages |
+Tables are created on startup, so an empty database is fine. Docker is what actually ships: the image
+bakes both vision models in and *runs* them during the build, so a version mismatch fails the build
+rather than a production request.
 
 ## Repository layout
 
