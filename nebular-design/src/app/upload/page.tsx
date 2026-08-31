@@ -94,9 +94,13 @@ export default function UploadPage() {
     // which made a slow analysis and a hung one look exactly alike.
     //
     // There is no real progress to report: the analysis is one POST that returns
-    // when it is done. So this reports the honest thing, which is elapsed time,
-    // shaped so it approaches but never reaches the end. It cannot claim to be
-    // nearly finished, and it never stops moving.
+    // when it is done. So the bar is shaped by elapsed time, approaching the end
+    // without ever reaching it — it cannot claim to be nearly finished, and it
+    // never stops moving.
+    //
+    // The elapsed seconds are deliberately not shown. A number counting upward
+    // is a clock to watch, and the only thing it tells you is how long you have
+    // been waiting. It drives the stage labels and the slow notice instead.
     const started = Date.now();
     const interval = setInterval(() => {
       const t = (Date.now() - started) / 1000;
@@ -280,9 +284,6 @@ export default function UploadPage() {
                 <div className="h-full rounded-full transition-all duration-500"
                   style={{ width: `${progress}%`, background: '#F7D117' }} />
               </div>
-              <p className="text-lego-dark-gray font-bold text-sm mt-3">
-                {elapsed > 0 ? `${Math.round(elapsed)}s elapsed` : `${Math.round(progress)}%`}
-              </p>
             </div>
             <div className="mt-9 flex flex-wrap justify-center gap-2.5 text-sm font-semibold">
               {[
