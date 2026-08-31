@@ -78,14 +78,15 @@ DEFAULT_RELIEF_STUDS = 5
 
 # How many LEGO colours one model may use.
 #
-# There used to be no cap: every cell independently found its nearest colour among
-# all forty-three, so a tan tower came out speckled with lone studs of Medium
-# Azure, Dark Green and Orange wherever the photo held noise or a JPEG artefact.
-# It read as confetti rather than stone, and no amount of extra detail elsewhere
-# survives a wall that looks like that. Real LEGO architecture sets use eight to
-# twelve colours for the same reason: the detail lives in the geometry, and a
-# disciplined palette is what lets the eye see it.
-DEFAULT_MAX_COLOURS = 12
+# Twelve while the catalogue held 43 colours, which was the real ceiling: a
+# sandstone tower had no good match in it and came out grey-green whatever the
+# palette budget. With 102 to draw on the budget matters less than it looks —
+# measured on the same photograph, raising this to 96 took the colours actually
+# used from 12 to 24 and the renders were indistinguishable past 24, because the
+# clustering runs out of distinguishable colours in the image long before it
+# runs out of slots. So: 24, which is where it saturates, and no higher, since
+# every extra colour is another line on the shopping list.
+DEFAULT_MAX_COLOURS = 24
 
 # Pieces the score treats as the size someone will actually build.
 #

@@ -37,9 +37,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Appearing in fewer sets than this, a part is a curiosity: it exists, but asking
-# a builder to source forty of them is asking them not to build the model.
-MIN_SETS = 150
+# Appearing in fewer sets than this, a part is a curiosity. The first pass set it
+# at 150 on the reasoning that asking a builder to source forty of a rare part is
+# asking them not to build the model — which held while the only way to get a
+# part was to buy it, and stopped holding when the answer became "print it". A
+# shape that appeared in five sets is a shape LEGO designed, moulded and shipped;
+# that is a good enough warrant to build with. Override with --min-sets.
+DEFAULT_MIN_SETS = 5
 
 # The name patterns that define each family, in the order the generator prefers
 # to reach for them.
@@ -61,6 +65,25 @@ FAMILIES: list[tuple[str, str]] = [
     ("wedge", r"^Wedge \d+ x \d+"),
     ("wedge_plate", r"^Wedge Plate \d+ x \d+"),
     ("panel", r"^Panel \d+ x \d+ x \d+"),
+    # Added when the brief changed from "a list you can order" to "a list you
+    # can order or print". These are the families a building actually wants and
+    # the first pass had no pattern for, so they were skipped without ever being
+    # counted as dropped.
+    ("window", r"^Window \d+ x \d+"),
+    ("door", r"^Door \d+ x \d+"),
+    ("wedge_curved", r"^Brick Wedged, Curved"),
+    ("wedge_sloped", r"^Brick Wedged, Sloped"),
+    ("curved_inverted", r"^Brick Curved Inverted \d+ x \d+"),
+    ("round_corner", r"^Brick Round Corner \d+ x \d+"),
+    # Studs facing sideways. This is the whole SNOT vocabulary — the technique
+    # that lets a facade carry detail finer than a stud, and the reason a real
+    # Architecture set does not read as a staircase.
+    ("brick_modified", r"^Brick Special \d+ x \d+"),
+    ("plate_modified", r"^Plate Special \d+ x \d+"),
+    ("bracket", r"^Bracket \d+ x \d+"),
+    # Big curved shells. Nothing else in the library can make the roof of an
+    # opera house.
+    ("shell", r"^Aircraft Fuselage"),
 ]
 
 # Variants that are the same shape with extra engineering. They change what the
@@ -70,7 +93,13 @@ SKIP = re.compile(
     r"(pr\d|pat\d|p\d\d|Sticker|Print|Duplo|Znap|Scala|Belville|Fabuland|Cloth"
     r"|Minifig|Technic|Electric|Sports|Assembly|Magnet|Wheel|Windscreen|Train"
     r"|Boat|Animal|Plant|with Axle|with Pin|with Hole|Stud Hole|Handle|Clip"
-    r"|Ball Joint|Hinge|Turntable|Socket|Bar |Groove and)",
+    r"|Ball Joint|Hinge|Turntable|Socket|Bar |Groove and"
+    # Widening FAMILIES let a second kind of part through: things that are
+    # shaped like nothing a wall can use. A minifigure's sword matches no
+    # architectural family on its own, but "Large Figure Weapon" and its
+    # neighbours sit next to the wedges and shells in the catalogue.
+    r"|Large Figure|Creature|Headwear|Weapon|Sword|Gun |Clikits|Hose"
+    r"|Bionicle|Accessory|Helmet|Armour|Armor|Costume)",
     re.I,
 )
 
@@ -144,6 +173,12 @@ def main() -> None:
     ap.add_argument("--ldraw", required=True, help="unpacked LDraw library (holds parts/ and p/)")
     ap.add_argument("--data", required=True, help="directory with parts.csv and inventory_parts.csv")
     ap.add_argument(
+        "--min-sets",
+        type=int,
+        default=DEFAULT_MIN_SETS,
+        help=f"drop parts appearing in fewer set inventories than this (default {DEFAULT_MIN_SETS})",
+    )
+    ap.add_argument(
         "--out",
         default=str(Path(__file__).resolve().parent.parent / "app/services/lego_shapes.py"),
     )
@@ -178,7 +213,7 @@ def main() -> None:
             if SKIP.search(name) or SKIP.search(part):
                 dropped["variant of another shape"] += 1
                 continue
-            if freq.get(part, 0) < MIN_SETS:
+            if freq.get(part, 0) < args.min_sets:
                 dropped["too rare to source"] += 1
                 continue
             m = measure_ldraw.measure(part)
@@ -198,7 +233,7 @@ def main() -> None:
     kept.sort(key=lambda m: (m["family"], -m["sets"], m["part"]))
     families = tuple(sorted({m["family"] for m in kept}))
 
-    lines = [HEADER.format(count=len(kept), min_sets=MIN_SETS)]
+    lines = [HEADER.format(count=len(kept), min_sets=args.min_sets)]
     for m in kept:
         lines.append(
             "    Shape({part!r}, {name!r}, {family!r}, {w}, {d}, {h}, {ymin}, {ymax}, "

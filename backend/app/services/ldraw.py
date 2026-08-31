@@ -20,7 +20,7 @@ Everything below was checked against the official library rather than recalled:
              X -40..40, Z -20..20), so the LONGER side is native to X. A brick
              placed the other way round needs a quarter turn about Y.
   Colours    LDraw colour codes are NOT Rebrickable colour IDs. Most coincide,
-             but three collide outright — see LDRAW_COLOUR below.
+             but some collide outright — see LDRAW_CODE below.
 """
 
 from __future__ import annotations
@@ -43,12 +43,22 @@ from app.services.legolize import COURSES_PER_STEP, FLOOR  # noqa: E402
 
 IDENTITY = "1 0 0 0 1 0 0 0 1"
 ROT_Y_90 = "0 0 -1 0 1 0 1 0 0"
+ROT_Y_180 = "-1 0 0 0 1 0 0 0 -1"
 ROT_Y_270 = "0 0 1 0 1 0 -1 0 0"
 
 # The rotation matrices as numbers, for working out where a rotated part actually
 # lands. p' = (-z, y, x) for a quarter turn, p' = (z, y, -x) for the other.
+#
+# "y0" and "y180" exist for the same reason the quarter turns do. A relief has
+# one silhouette and its roof slopes only ever descend across the facade, so two
+# turns covered it. A solid has four sides, and a slope on the back wall has to
+# descend the other way down Z — which is the half turn — while one on the front
+# needs no turn at all but still needs its centre measured, because a slope is
+# not centred on its own origin and the untuned path assumes parts are.
 _TURN = {
+    "y0": (IDENTITY, lambda x, z: (x, z)),
     "y90": (ROT_Y_90, lambda x, z: (-z, x)),
+    "y180": (ROT_Y_180, lambda x, z: (-x, -z)),
     "y270": (ROT_Y_270, lambda x, z: (z, -x)),
 }
 
@@ -72,26 +82,15 @@ def _rotated_centre(shape, turn: str) -> tuple[float, float]:
 
 # Rebrickable colour ID -> LDraw colour code.
 #
-# Checked every palette entry against the official LDConfig.ldr. 40 of 43 share
-# an ID and a name; the RGB values differ a little because LDraw and Rebrickable
-# measured the same physical colour differently, which is harmless. The three
-# below are genuine collisions — passing the Rebrickable ID straight through
-# would silently render the model in the wrong colour:
-#
-#   326 is "Olive Green" to Rebrickable but "Yellowish Green" to LDraw
-#   158 is "Yellowish Green" to Rebrickable but "Trans Neon Red" to LDraw
-#   the 1000+ IDs are Rebrickable-only and have no LDraw code at all
-LDRAW_COLOUR: dict[int, int] = {
-    326: 330,  # Olive Green
-    158: 326,  # Yellowish Green
-    1050: 353,  # Coral
-    1136: 402,  # Reddish Orange
-    1062: 14,  # Vibrant Yellow has no LDraw equivalent; plain Yellow is closest
-    # The glazing colours. 40, 47 and 33 agree between the two catalogues; 41 does
-    # not, and it is the sort of collision that renders without complaint: passing
-    # it through would put Trans_Medium_Blue in every window.
-    41: 43,  # Trans-Light Blue -> LDraw Trans_Light_Blue
-}
+# Generated, not kept by hand: see scripts/build_colour_table.py, which matches
+# every colour against the official LDConfig.ldr by name first and RGB second.
+# The hand-kept version listed six exceptions and was correct for the 43-colour
+# palette it was written against. Widening that palette to 137 left 34 colours —
+# Warm Tan and Sienna Brown among them, which are most of Big Ben — with no
+# LDraw code at all, and an unresolvable code does not fail: the viewer just
+# draws the part in the wrong colour. The generated map reproduces all six of
+# the hand-checked exceptions and covers the rest.
+from app.services.lego_colours import LDRAW_CODE
 
 # LDraw renamed this one; the old number still resolves as an alias, but the
 # canonical file is what viewers expect to find.
@@ -99,7 +98,7 @@ LDRAW_PART: dict[str, str] = {"3023": "3023b"}
 
 
 def _colour(rebrickable_id: int) -> int:
-    return LDRAW_COLOUR.get(rebrickable_id, rebrickable_id)
+    return LDRAW_CODE.get(rebrickable_id, rebrickable_id)
 
 
 def _part(part_num: str) -> str:
