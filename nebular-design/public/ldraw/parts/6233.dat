@@ -1,0 +1,45 @@
+0 Cone  3 x  3 x  2
+0 Name: 6233.dat
+0 Author: Steve Bliss [sbliss]
+0 !LDRAW_ORG Part UPDATE 2025-12
+0 !LICENSE Licensed under CC BY 4.0 : see CAreadme.txt
+
+0 BFC CERTIFY CCW
+
+0 !KEYWORDS Brickowl 252671, Cylinder, nozzle, Rocket, Round
+
+0 !HISTORY 1999-07-05 [PTadmin] Official Update 1999-05
+0 !HISTORY 2007-07-16 [PTadmin] Header formatted for Contributor Agreement
+0 !HISTORY 2008-07-01 [PTadmin] Official Update 2008-01
+0 !HISTORY 2008-07-07 [guyvivan] Made BFC compliant, fixed bad vertex sequence, corrected top edge (2004-10-16)
+0 !HISTORY 2009-09-03 [PTadmin] Official Update 2009-02
+0 !HISTORY 2024-12-31 [Blechtaler] reworked with subfiles and Hi-Res outer cone
+0 !HISTORY 2025-11-30 [OrionP] Official Update 2025-11
+0 !HISTORY 2025-12-25 [OrionP] Minor header edits
+0 !HISTORY 2025-12-25 [OrionP] Official Update 2025-12
+
+1 16 0 0 0 6 0 0 0 1 0 0 0 6 4-4ndis.dat
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 axl5ho10.dat
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 axl5hol9.dat
+1 16 0 0 0 1 0 0 0 4 0 0 0 1 axl5hol8.dat
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 axlehol2.dat
+1 16 0 4 0 1 0 0 0 1 0 0 0 1 axlehol2.dat
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 stug10-2x2.dat
+1 16 10 44 10 1 0 0 0 -1 0 0 0 1 stud4a.dat
+1 16 10 44 -10 1 0 0 0 -1 0 0 0 1 stud4a.dat
+1 16 -10 44 10 1 0 0 0 -1 0 0 0 1 stud4a.dat
+1 16 -10 44 -10 1 0 0 0 -1 0 0 0 1 stud4a.dat
+
+1 16 0 0 0 20 0 0 0 1 0 0 0 20 48\4-4edge.dat
+1 16 0 40 0 10 0 0 0 -40 0 0 0 10 48\4-4con2.dat
+1 16 0 40 0 30 0 0 0 1 0 0 0 30 48\4-4edge.dat
+1 16 0 40 0 30 0 0 0 4 0 0 0 30 48\4-4cyli.dat
+
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\6233s01.dat
+1 16 0 0 0 1 0 0 0 1 0 0 0 -1 s\6233s01.dat
+1 16 0 0 0 -1 0 0 0 1 0 0 0 1 s\6233s01.dat
+1 16 0 0 0 -1 0 0 0 1 0 0 0 -1 s\6233s01.dat
+1 16 0 0 0 0 0 1 0 1 0 -1 0 0 s\6233s01.dat
+1 16 0 0 0 0 0 1 0 1 0 1 0 0 s\6233s01.dat
+1 16 0 0 0 0 0 -1 0 1 0 1 0 0 s\6233s01.dat
+1 16 0 0 0 0 0 -1 0 1 0 -1 0 0 s\6233s01.dat

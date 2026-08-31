@@ -1,0 +1,17 @@
+0 Wing  3 x  6 Left
+0 Name: 54384.dat
+0 Author: Magnus Forsberg [MagFors]
+0 !LDRAW_ORG Part UPDATE 2026-04
+0 !LICENSE Licensed under CC BY 4.0 : see CAreadme.txt
+
+0 BFC CERTIFY CCW
+
+0 !KEYWORDS Brickowl 682997, plate, wedge
+
+0 !HISTORY 2010-07-05 [PTadmin] Official Update 2010-02
+0 !HISTORY 2025-09-07 [MagFors] Complete rewrite, original by Guy Vivan
+0 !HISTORY 2026-04-27 [OrionP] Official Update 2026-04
+
+1 16 0 0 0 -1 0 0 0 1 0 0 0 1 s\54383s01.dat
+1 16 -20 0 0 0 0 -1 0 1 0 1 0 0 stug-1x6.dat
+1 16 0 0 30 0 0 -1 0 1 0 1 0 0 stug-1x3.dat

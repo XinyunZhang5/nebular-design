@@ -1,0 +1,66 @@
+name: CI
+
+# The catalogue job is the one that exists for a reason. The parts and colour
+# tables are generated, the browser ships a subset of the LDraw library, and the
+# two can drift apart without anything failing: the backend writes a valid .ldr,
+# returns 201, and the viewer refuses the whole model over one missing subpart.
+# Nothing in the server logs says so. This is where that gets caught.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  catalogues:
+    name: Catalogues and viewer library
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Not requirements.txt. The check imports the catalogue modules and
+      # nothing below them, so it needs numpy, Pillow and pydantic-settings —
+      # not torch, transformers or scipy, which are 400 MB and several minutes
+      # of install for code this job never reaches.
+      - name: Install what the check imports
+        run: pip install numpy pillow pydantic-settings
+
+      # Reads nebular-design/public/ldraw, which is committed, so this needs
+      # none of the 745 MB LDraw download that backend/.data/ holds locally.
+      - name: Check catalogues
+        working-directory: backend
+        run: python scripts/check_catalogues.py
+
+  frontend:
+    name: Frontend types
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nebular-design
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: nebular-design/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Advisory, not a gate. There are nine pre-existing errors — three
+      # set-state-in-effect and five no-explicit-any in LegoViewer — none of
+      # which this pipeline introduced. Blocking on them would turn every pull
+      # request red for reasons unrelated to the change in it. Drop the
+      # continue-on-error once they are cleared.
+      - name: Lint
+        run: npx eslint .
+        continue-on-error: true
