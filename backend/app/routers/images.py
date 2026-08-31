@@ -29,6 +29,16 @@ ALLOWED_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/gi
 # gets stored; services/bricks.py shrinks a copy down to what the vision API accepts.
 MAX_SIZE = 50 * 1024 * 1024  # 50 MB
 
+# The longest edge the analysis runs at. The original is what gets stored and
+# shown; this bounds only the copy the models see.
+#
+# Nothing downstream wants more. The mask and the depth map are both reduced to
+# a stud grid a few dozen cells across, and the depth model already resizes to a
+# 1024 pixel edge of its own accord — so past this point the extra pixels are
+# carried through several full-frame float arrays and then thrown away. A
+# 4000 x 3000 phone photo is 12 megapixels of that, on a machine with 2 GB.
+MAX_WORKING_EDGE = 1600
+
 # Resolution and relief are no longer set here. They used to be constants with a
 # paragraph of justification attached, and the justification was wrong for half of
 # the photographs that came in — see generate_best_plan, which now measures.
@@ -101,6 +111,14 @@ async def upload_and_analyze(
     image_url, s3_key = await upload_image(
         file_bytes, image.filename or "upload.jpg", content_type
     )
+
+    # Analyse a bounded copy. Uploaded straight off a phone, `source` is a dozen
+    # megapixels, and every stage after this holds at least one full-frame array
+    # of it. The stored image above is the original and is unaffected.
+    if max(source.size) > MAX_WORKING_EDGE:
+        before = source.size
+        source.thumbnail((MAX_WORKING_EDGE, MAX_WORKING_EDGE), Image.Resampling.LANCZOS)
+        logger.info("Analysing at %s rather than %s", source.size, before)
 
     # 1. Which pixels are the building. Without this the sky, being the largest flat
     #    region in most outdoor shots, takes the biggest share of the piece budget.

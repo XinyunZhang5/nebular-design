@@ -157,12 +157,35 @@ def _segment_sync(model, processor, image: Image.Image) -> dict:
     with torch.no_grad():
         outputs = model(**inputs)
 
-    # Logits come back at a quarter resolution; ask the processor to put them
-    # back onto the original pixel grid before taking the argmax.
-    seg = processor.post_process_semantic_segmentation(
-        outputs, target_sizes=[(rgb.size[1], rgb.size[0])]
-    )[0]
-    classes = seg.cpu().numpy().astype(np.int32)
+    # Argmax FIRST, at the model's own output resolution, then scale the labels
+    # up. The obvious call is post_process_semantic_segmentation, which does it
+    # the other way round: it interpolates the logits onto the original pixel
+    # grid and takes the argmax there. That tensor is one float per class per
+    # pixel, and this model has 150 classes, so a 2222 x 2222 photograph asks for
+    #
+    #     150 x 2222 x 2222 x 4 bytes = 2.96 GB
+    #
+    # on a 2 GB machine. It is not a slow path or a near miss, it is an outright
+    # allocation failure, and every upload of a full-resolution photo died on it:
+    #
+    #     RuntimeError: DefaultCPUAllocator: can't allocate memory:
+    #     you tried to allocate 2962370400 bytes. Error code 12
+    #
+    # Taking the argmax at 128 x 128 costs 150 x 128 x 128 x 4 = 9.8 MB, and the
+    # label map that comes out of it is one int per pixel — nineteen megabytes at
+    # full size instead of three gigabytes. The two differ only in how a class
+    # boundary is resolved, by at most a pixel, and this mask is about to be
+    # reduced to a grid forty studs across.
+    labels = outputs.logits.argmax(dim=1)[0].to(torch.int32).cpu().numpy()
+
+    # Nearest neighbour by index, so a class id is never averaged into a class
+    # that is not there. Bilinear on a label map invents classes: halfway between
+    # 1 (building) and 3 (floor) is 2, which is sky.
+    height, width = rgb.size[1], rgb.size[0]
+    src_h, src_w = labels.shape
+    rows = np.minimum((np.arange(height) * src_h) // height, src_h - 1)
+    cols = np.minimum((np.arange(width) * src_w) // width, src_w - 1)
+    classes = labels[rows[:, None], cols[None, :]].astype(np.int32)
 
     mask = np.isin(classes, list(BUILDING_CLASS_IDS))
     building_share = float(mask.mean())
