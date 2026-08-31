@@ -20,10 +20,10 @@ const STEPS = [
 ];
 
 const GALLERY = [
-  { title: 'Empire State Building', pieces: 847, difficulty: 'Expert', seed: 'empire-state-skyscraper-newyork' },
-  { title: 'Sydney Opera House', pieces: 623, difficulty: 'Hard', seed: 'sydney-opera-house-harbour' },
-  { title: 'Eiffel Tower', pieces: 412, difficulty: 'Medium', seed: 'eiffel-tower-paris-sky' },
-  { title: 'Big Ben', pieces: 534, difficulty: 'Hard', seed: 'big-ben-london-clocktower' },
+  { title: 'Empire State Building', pieces: 847, difficulty: 'Expert', img: '/gallery/empire-state.webp' },
+  { title: 'Sydney Opera House', pieces: 623, difficulty: 'Hard', img: '/gallery/sydney-opera.webp' },
+  { title: 'Eiffel Tower', pieces: 412, difficulty: 'Medium', img: '/gallery/eiffel-tower.webp' },
+  { title: 'Big Ben', pieces: 534, difficulty: 'Hard', img: '/gallery/big-ben.webp' },
 ];
 
 export default function HomePage() {
@@ -105,7 +105,7 @@ export default function HomePage() {
                 style={{ boxShadow: '0 22px 34px rgba(28,28,28,0.09)' }}
               >
                 <img
-                  src={`https://picsum.photos/seed/${item.seed}/600/750`}
+                  src={item.img}
                   alt={item.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
