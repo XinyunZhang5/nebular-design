@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     # Compare them on your own photos with tools/preview_server.py before moving up.
     segmentation_model: str = "nvidia/segformer-b0-finetuned-ade-512-512"
 
+    # Build from a reconstructed mesh instead of the depth-map relief. Off by
+    # default: the weights are 1.7 GB and the forward pass wants more memory
+    # than the deployed instance has, so this is a local-first switch until the
+    # reconstruction moves behind its own worker.
+    enable_reconstruction: bool = False
+    reconstruction_model: str = "stabilityai/TripoSR"
+    # Model width in studs. The solid grows with the cube of this, and so does
+    # the parts list: 40 lands around two thousand pieces, which is the size of
+    # a retail LEGO Architecture set.
+    reconstruction_studs: int = 40
+    # Above zero, approximate the building by the boxes covering this fraction
+    # of it before bricking. Cheaper parts list, coarser silhouette; see
+    # `voxel.boxify`. Off by default.
+    reconstruction_box_coverage: float = 0.0
+
     # Comma-separated list of allowed frontend origins
     frontend_url: str = "http://localhost:3000"
 

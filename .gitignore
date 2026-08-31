@@ -33,3 +33,8 @@ backend/uploads/
 # Local-only docs (deployment runbook + backlog, keep off GitHub)
 documentation/部署手册.md
 documentation/待办清单.md
+
+# Catalogue inputs for scripts/build_*.py — 745 MB of LDraw geometry and
+# Rebrickable CSVs. Re-fetch with backend/.data/fetch.sh; the generated
+# lego_shapes.py and lego_colours.py are what the app actually reads.
+backend/.data/

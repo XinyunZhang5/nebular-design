@@ -6,6 +6,7 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.database import get_db
 from app.models import User, Project
 from app.schemas import ProjectOut, ProjectRenameBody
@@ -15,6 +16,9 @@ from app.services.depth import estimate_depth_with_map
 from app.services.bricks import describe_build
 from app.services.ldraw import to_ldraw
 from app.services.legolize import refine_plan, render_facade, render_massing
+from app.services.reconstruct import reconstruct
+from app.services.solid_plan import plan_from_solid, render_isometric
+from app.services.voxel import voxelise
 from app.services.segment import crop_to_building, segment_building
 
 logger = logging.getLogger(__name__)
@@ -116,15 +120,34 @@ async def upload_and_analyze(
         logger.info("No building found; building the whole frame instead.")
         work_img, work_depth, work_mask = source, depth_map, None
 
-    # Search for the settings, then spend the palette where the model scores
-    # worst. Roughly a second for both, against twenty for the depth and
-    # segmentation passes above, which every candidate shares.
-    plan = refine_plan(work_img, work_depth, building_mask=work_mask)
-    grids = plan.pop("_grids")  # numpy — never goes near the database
+    # Two geometries, one parts layer. The relief is what a depth map can carry;
+    # the solid is a reconstruction, and the only reason it is not the default is
+    # that it wants a GPU and 1.7 GB of weights that the deployed instance does
+    # not have. Everything downstream — parts, colours, steps, LDraw — is shared.
+    settings = get_settings()
+    solid_render = None
+    if settings.enable_reconstruction:
+        mesh = await reconstruct(source, segmentation["mask"] if work_mask is not None else None)
+        solid = voxelise(
+            mesh,
+            max_studs=settings.reconstruction_studs,
+            box_coverage=settings.reconstruction_box_coverage,
+        )
+        plan = plan_from_solid(solid)
+        cells = plan.pop("_cells")
+        solid_render = (plan.pop("_solid"), plan.pop("_colours"))
+        grids = None
+    else:
+        # Search for the settings, then spend the palette where the model scores
+        # worst. Roughly a second for both, against twenty for the depth and
+        # segmentation passes above, which every candidate shares.
+        plan = refine_plan(work_img, work_depth, building_mask=work_mask)
+        grids = plan.pop("_grids")  # numpy — never goes near the database
+        cells = grids["cells"]
 
     grid_w = plan["grid"]["width"]
     model = to_ldraw(
-        grids["cells"], grid_w, plan["grid"]["courses"], plan["grid"]["depth"],
+        cells, grid_w, plan["grid"]["courses"], plan["grid"]["depth"],
         name=f"Nebular build — {image.filename or 'upload'}",
     )
     # Out to object storage rather than into the row: see _out(). If the write
@@ -147,8 +170,15 @@ async def upload_and_analyze(
     #    14px the stud's own shadow ring swallows its colour — so raising the stud
     #    count made the picture muddier instead of sharper.
     try:
-        facade = render_facade(grids["depths"], grids["colours"], scale=max(8, 1600 // grid_w))
-        massing = render_massing(grids["depths"], grids["colours"], scale=max(6, 1200 // grid_w))
+        if solid_render is not None:
+            # A solid is worth walking around, so the two renders are two corners
+            # of it rather than a flat elevation and an angle on the same face.
+            filled, colours = solid_render
+            facade = render_isometric(filled, colours, cell=max(6, 900 // grid_w), azimuth=0)
+            massing = render_isometric(filled, colours, cell=max(5, 700 // grid_w), azimuth=1)
+        else:
+            facade = render_facade(grids["depths"], grids["colours"], scale=max(8, 1600 // grid_w))
+            massing = render_massing(grids["depths"], grids["colours"], scale=max(6, 1200 // grid_w))
         plan["previewUrl"], _ = await upload_image(
             _png_bytes(facade), "facade.png", "image/png"
         )
