@@ -131,7 +131,31 @@ def main() -> None:
         {s.part_num for s in solid_plan.SLOPES.values() if abs(s.height - BRICK_LDU) > 0.01},
     )
 
-    print("E. viewer library")
+    print("E. wall panels")
+    # A panel is placed by a rule that reads `wall_side`, and the rule has an
+    # else branch. A panel with no measured side would take it and go into the
+    # wall backwards, showing its ribs, with nothing raised. Every panel that
+    # can be placed must have been measured, must be one stud thick, and must
+    # stand a whole number of courses or it seats between two of them.
+    check(
+        "every wall panel has a measured wall side",
+        {p.part_num for p in cat.PANEL_WALLS if p.wall_side not in ("+z", "-z")},
+    )
+    check(
+        "every wall panel is one stud thick",
+        {p.part_num for p in cat.PANEL_WALLS if min(shapes.BY_PART[p.part_num].width,
+                                                    shapes.BY_PART[p.part_num].depth) != 1},
+    )
+    check(
+        "every wall panel is a whole number of courses",
+        {
+            p.part_num
+            for p in cat.PANEL_WALLS
+            if abs(shapes.BY_PART[p.part_num].height - p.courses * BRICK_LDU) > 0.01
+        },
+    )
+
+    print("F. viewer library")
     # Resolved against the shipped library rather than the full one, so this is
     # the same question the browser asks: can it fetch every file it will be
     # told to fetch, and every file those files reference in turn.
