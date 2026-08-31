@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # default: the weights are 1.7 GB and the forward pass wants more memory
     # than the deployed instance has, so this is a local-first switch until the
     # reconstruction moves behind its own worker.
+    # Wall clock the plan search may spend, in seconds. The grid it enumerates
+    # costs about a second here and minutes on a shared-cpu-1x, so this is the
+    # knob that decides how long an upload takes on the machine it is deployed
+    # to — settable per environment without touching the search.
+    plan_search_seconds: float = 35.0
+
     enable_reconstruction: bool = False
     reconstruction_model: str = "stabilityai/TripoSR"
     # Model width in studs. The solid grows with the cube of this, and so does

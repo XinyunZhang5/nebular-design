@@ -1196,12 +1196,43 @@ SEARCH_DITHER: tuple[float, ...] = (0.0, 0.6)
 # that back on a subject with real spans and does nothing on one without.
 SEARCH_CORBEL: tuple[bool, ...] = (False, True)
 
+# The palette size the coarse pass holds fixed while it decides the two settings
+# that matter. Measured on the Big Ben photograph, the best score reachable with
+# each value pinned:
+#
+#     studs    64 = 0.5832   96 = 0.5646   128 = 0.4537
+#     relief    3 = 0.5661    5 = 0.5832
+#     colours   8 = 0.5832   12 = 0.5812    16 = 0.5827
+#     dither  0.0 = 0.5832  0.6 = 0.5809
+#     corbel  off = 0.5832   on = 0.5737
+#
+# Resolution moves the score by 0.13 and relief by 0.017. The other three move
+# it by less than 0.01 between them, and the full 72-way grid spends 54 of its
+# plans deciding them. Searching the two that matter and then refining the
+# winner over the three that do not picks the same settings.
+COARSE_COLOURS = 12
+
+# Wall clock the search may spend, in seconds. A budget rather than a plan count
+# because the same grid costs 6 seconds on a laptop and ten minutes on the
+# deployed machine — one plan measured at 85 ms here and between 5 and 14
+# seconds on a Fly shared-cpu-1x, which is where 72 of them plus three rounds of
+# refinement turned an upload into a six-minute wait behind a progress bar that
+# was only guessing.
+#
+# What this trades: on a slow machine the search sees fewer candidates and may
+# return a worse plan than a fast one would. That is the honest trade — the
+# alternative is not a better plan, it is a request nobody waits for. The order
+# below is chosen so the candidates most likely to win are tried first, and one
+# plan always completes however small the budget.
+SEARCH_BUDGET_SECONDS = 35.0
+
 
 def generate_best_plan(
     image: bytes | Image.Image,
     depth_map: np.ndarray,
     building_mask: np.ndarray | None = None,
     candidates: int | None = None,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     """Build the model several ways and keep the one that looks most like the photo.
 
@@ -1215,10 +1246,21 @@ def generate_best_plan(
     because one is a massed building shot at an angle and the other is close to a
     flat facade. A single default is wrong for one of them whichever way it is set.
 
-    One plan costs about fifty milliseconds at these sizes; depth estimation and
-    segmentation, which run once and are shared by every candidate, cost twenty
-    seconds. The search is therefore free in the only sense that matters.
+    Two stages, and a clock.
+
+    The first decides resolution and relief, which between them move the score by
+    0.15; the second refines the winner over palette size, dither and corbelling,
+    which move it by under 0.01. The full product of all five was the first
+    version and it cost 72 plans to reach the same answer as 22.
+
+    The clock is not a refinement. "One plan costs about fifty milliseconds"
+    was true where it was written and false where the code runs: the same plan
+    is 5 to 14 seconds on the deployed machine, so the grid that was free here
+    was a six-minute request there. `deadline` bounds it. The stage order means
+    a budget that only affords a few candidates spends them on the ones most
+    likely to win, and the first candidate always runs.
     """
+    import time
     if isinstance(image, bytes):
         import io
 
@@ -1226,31 +1268,61 @@ def generate_best_plan(
 
     tried: list[dict[str, Any]] = []
     best: dict[str, Any] | None = None
+    chosen = {"studs": SEARCH_STUDS[0], "relief": SEARCH_RELIEF[0],
+              "colours": COARSE_COLOURS, "dither": SEARCH_DITHER[0],
+              "corbel": SEARCH_CORBEL[0]}
+
+    def spent() -> bool:
+        """True once there is no time left. Never true before the first plan."""
+        if candidates is not None and len(tried) >= candidates:
+            return True
+        return bool(tried) and deadline is not None and time.monotonic() >= deadline
+
+    def attempt(studs: int, relief: int, ncol: int, dither: float, corbel: bool) -> None:
+        nonlocal best, chosen
+        plan = generate_plan(
+            image, depth_map, building_mask=building_mask,
+            max_studs=studs, relief_studs=relief, max_colours=ncol,
+            dither=dither, corbel=corbel,
+        )
+        settings = {"studs": studs, "relief": relief, "colours": ncol,
+                    "dither": dither, "corbel": corbel}
+        tried.append({**settings, "overall": plan["fidelity"]["overall"],
+                      "pieces": plan["estimatedPieceCount"]})
+        if best is None or plan["fidelity"]["overall"] > best["fidelity"]["overall"]:
+            best, chosen = plan, settings
+
+    # Stage one: resolution and relief, the settings that move the score.
     for studs in SEARCH_STUDS:
         for relief in SEARCH_RELIEF:
-            for ncol in SEARCH_COLOURS:
-                for dither in SEARCH_DITHER:
-                    for corbel in SEARCH_CORBEL:
-                        if candidates is not None and len(tried) >= candidates:
-                            break
-                        plan = generate_plan(
-                            image, depth_map, building_mask=building_mask,
-                            max_studs=studs, relief_studs=relief, max_colours=ncol,
-                            dither=dither, corbel=corbel,
-                        )
-                        tried.append({
-                            "studs": studs, "relief": relief, "colours": ncol,
-                            "dither": dither, "corbel": corbel,
-                            "overall": plan["fidelity"]["overall"],
-                            "pieces": plan["estimatedPieceCount"],
-                        })
-                        if best is None or plan["fidelity"]["overall"] > best["fidelity"]["overall"]:
-                            best = plan
+            if spent():
+                break
+            attempt(studs, relief, COARSE_COLOURS, SEARCH_DITHER[0], SEARCH_CORBEL[0])
+
+    # Stage two: the rest, around whatever stage one settled on.
+    coarse = dict(chosen)
+    for ncol in SEARCH_COLOURS:
+        for dither in SEARCH_DITHER:
+            for corbel in SEARCH_CORBEL:
+                if (ncol, dither, corbel) == (
+                    coarse["colours"], coarse["dither"], coarse["corbel"]
+                ):
+                    continue  # already run as the coarse winner
+                if spent():
+                    break
+                attempt(coarse["studs"], coarse["relief"], ncol, dither, corbel)
 
     assert best is not None
     tried.sort(key=lambda t: -t["overall"])
     best["search"] = {
         "tried": len(tried),
+        # Reported so a plan can be read against how much of the grid it saw. On
+        # a machine that ran out of budget this is well short of the full space,
+        # and a score compared across two machines is not comparing like with
+        # like.
+        "budgetExhausted": bool(
+            deadline is not None and time.monotonic() >= deadline
+        ),
         "chosen": {k: tried[0][k] for k in ("studs", "relief", "colours", "dither", "corbel")},
         # The runners-up, so a result that looks wrong can be argued with rather
         # than only accepted: if the second choice scored 0.599 against 0.601, the
@@ -1277,6 +1349,7 @@ def refine_plan(
     depth_map: np.ndarray,
     building_mask: np.ndarray | None = None,
     rounds: int = REFINE_ROUNDS,
+    budget: float | None = SEARCH_BUDGET_SECONDS,
 ) -> dict[str, Any]:
     """Search for settings, then spend the colour budget where the model is worst.
 
@@ -1301,7 +1374,13 @@ def refine_plan(
 
         image = Image.open(io.BytesIO(image))
 
-    best = generate_best_plan(image, depth_map, building_mask=building_mask)
+    import time
+
+    # One budget for the whole thing, shared: the search takes what it needs and
+    # refinement gets what is left. Splitting it in two would let a search that
+    # finished early leave time unspent while refinement was cut short.
+    deadline = None if budget is None else time.monotonic() + budget
+    best = generate_best_plan(image, depth_map, building_mask=building_mask, deadline=deadline)
     chosen = best["search"]["chosen"]
     history = [{"round": 0, "overall": best["fidelity"]["overall"], "note": "search winner"}]
 
@@ -1323,6 +1402,10 @@ def refine_plan(
         xs = np.linspace(0, w, 7).astype(int)
         for t in worst:
             weight[ys[t["row"]]:ys[t["row"] + 1], xs[t["col"]]:xs[t["col"] + 1]] *= REFINE_BOOST
+
+        if deadline is not None and time.monotonic() >= deadline:
+            history.append({"round": r, "skipped": "out of budget"})
+            break
 
         candidate = generate_plan(
             image, depth_map, building_mask=building_mask,
@@ -1346,8 +1429,9 @@ def refine_plan(
             # the first failure would mistake a plateau for a peak.
             continue
 
+    scored = [h for h in history if "overall" in h]
     best["refine"] = {"rounds": history, "improved": round(
-        history[-1]["overall"] - history[0]["overall"], 4) if len(history) > 1 else 0.0}
+        scored[-1]["overall"] - scored[0]["overall"], 4) if len(scored) > 1 else 0.0}
     logger.info("Refinement: %s", history)
     return best
 

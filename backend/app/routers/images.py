@@ -157,9 +157,14 @@ async def upload_and_analyze(
         grids = None
     else:
         # Search for the settings, then spend the palette where the model scores
-        # worst. Roughly a second for both, against twenty for the depth and
-        # segmentation passes above, which every candidate shares.
-        plan = refine_plan(work_img, work_depth, building_mask=work_mask)
+        # worst — under a wall-clock budget, because this is the part that does
+        # not cost what it looks like it costs. It is about a second on a laptop
+        # and was six minutes on the deployed machine, where one candidate plan
+        # runs 5 to 14 seconds and the search enumerated seventy-five of them.
+        plan = refine_plan(
+            work_img, work_depth, building_mask=work_mask,
+            budget=settings.plan_search_seconds,
+        )
         grids = plan.pop("_grids")  # numpy — never goes near the database
         cells = grids["cells"]
 
