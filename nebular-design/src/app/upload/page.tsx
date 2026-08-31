@@ -44,11 +44,23 @@ function ProgressSteps({ current }: { current: number }) {
   );
 }
 
+// Roughly how long the analysis takes when the server is already awake: a few
+// seconds to upload, about twenty for segmentation and depth, and the rest for
+// the brick search, which is bounded by a budget on the backend. Used only to
+// shape the bar — nothing here waits on it.
+const EXPECTED_SECONDS = 45;
+
+// Past this, say so. The machine scales to zero, so the first upload after a
+// quiet spell pays for a container boot and two models loading, and silence at
+// that point reads as a hang.
+const SLOW_SECONDS = 75;
+
 export default function UploadPage() {
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -76,12 +88,21 @@ export default function UploadPage() {
 
     setStep(1); setError('');
 
-    let p = 0;
+    // Driven by the clock, not by a random walk. The old bar added up to eight
+    // points every half second and stopped at 85, so it was pinned there within
+    // ten seconds and stayed pinned for however long the request actually took —
+    // which made a slow analysis and a hung one look exactly alike.
+    //
+    // There is no real progress to report: the analysis is one POST that returns
+    // when it is done. So this reports the honest thing, which is elapsed time,
+    // shaped so it approaches but never reaches the end. It cannot claim to be
+    // nearly finished, and it never stops moving.
+    const started = Date.now();
     const interval = setInterval(() => {
-      p += Math.random() * 8;
-      if (p >= 85) { p = 85; clearInterval(interval); }
-      setProgress(Math.min(p, 85));
-    }, 500);
+      const t = (Date.now() - started) / 1000;
+      setElapsed(t);
+      setProgress(95 * (1 - Math.exp(-t / EXPECTED_SECONDS)));
+    }, 250);
 
     try {
       const formData = new FormData();
@@ -92,6 +113,7 @@ export default function UploadPage() {
 
       clearInterval(interval);
       setProgress(100);
+      setElapsed(0);
 
       setProjectId(project.id);
       if (project.image_url) setImageUrl(project.image_url);
@@ -104,13 +126,13 @@ export default function UploadPage() {
     } catch (err) {
       clearInterval(interval);
       setError(err instanceof Error ? err.message : 'Analysis failed — please try again');
-      setStep(0); setProgress(0);
+      setStep(0); setProgress(0); setElapsed(0);
     }
   };
 
   const handleReset = () => {
     setStep(0); setPreview(null); setFile(null);
-    setProgress(0); setResult(null); setImageUrl(null); setError('');
+    setProgress(0); setElapsed(0); setResult(null); setImageUrl(null); setError('');
     setProjectId(null); setBuildName(null);
   };
 
@@ -249,14 +271,18 @@ export default function UploadPage() {
             />
             <h2 className="font-extrabold text-2xl text-lego-black mb-3">Analyzing your building</h2>
             <p className="text-lego-dark-gray font-medium mb-9 max-w-sm mx-auto leading-relaxed">
-              Estimating 3D depth, then matching LEGO bricks to the geometry.
+              {elapsed > SLOW_SECONDS
+                ? 'Still working. The server sleeps when idle, so the first build after a quiet spell takes longer.'
+                : 'Estimating 3D depth, then matching LEGO bricks to the geometry.'}
             </p>
             <div className="max-w-sm mx-auto">
               <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(28,28,28,0.08)' }}>
                 <div className="h-full rounded-full transition-all duration-500"
                   style={{ width: `${progress}%`, background: '#F7D117' }} />
               </div>
-              <p className="text-lego-dark-gray font-bold text-sm mt-3">{Math.round(progress)}%</p>
+              <p className="text-lego-dark-gray font-bold text-sm mt-3">
+                {elapsed > 0 ? `${Math.round(elapsed)}s elapsed` : `${Math.round(progress)}%`}
+              </p>
             </div>
             <div className="mt-9 flex flex-wrap justify-center gap-2.5 text-sm font-semibold">
               {[
@@ -264,7 +290,9 @@ export default function UploadPage() {
                 { label: 'Depth mapping', Icon: ScanLine },
                 { label: 'Brick matching', Icon: Cpu },
               ].map(({ label, Icon }, i) => {
-                const on = progress > i * 30;
+                // Thresholds in seconds, against what each stage actually costs,
+                // rather than thirds of a bar that was not measuring anything.
+                const on = elapsed > [0, 3, 22][i];
                 return (
                   <span key={label} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-colors"
                     style={{
