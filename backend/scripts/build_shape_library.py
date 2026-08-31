@@ -138,6 +138,12 @@ class Shape(NamedTuple):
     z_min: float
     z_max: float
     has_studs: bool
+    # Which way the part's one large flat face points, along Z, for parts that
+    # have one: "+z", "-z", or None when the two sides are alike. Measured as
+    # area, not assumed — every panel in the library faces +z except Panel
+    # 1 x 6 x 5, which faces -z, and a panel mounted the wrong way round shows
+    # its supporting ribs to the camera without any error being raised.
+    wall_side: str | None
     # Which horizontal axis the top surface descends along, and in which
     # direction, measured off the vertices. None for a flat-topped part.
     slope_axis: str | None
@@ -238,12 +244,13 @@ def main() -> None:
         lines.append(
             "    Shape({part!r}, {name!r}, {family!r}, {w}, {d}, {h}, {ymin}, {ymax}, "
             "{xmin}, {xmax}, {zmin}, {zmax}, "
-            "{studs}, {sa!r}, {sd!r}, {drop}, {sets}),\n".format(
+            "{studs}, {ws!r}, {sa!r}, {sd!r}, {drop}, {sets}),\n".format(
                 part=m["part"], name=m["name"], family=m["family"],
                 w=m["widthStuds"], d=m["depthStuds"], h=m["heightLDU"],
                 ymin=m["yMinLDU"], ymax=m["yMaxLDU"],
                 xmin=m["xMinLDU"], xmax=m["xMaxLDU"],
                 zmin=m["zMinLDU"], zmax=m["zMaxLDU"], studs=m["hasStuds"],
+                ws=m["wallSide"],
                 sa=m["slopeAxis"], sd=m["slopeDir"], drop=m["slopeDrop"], sets=m["sets"],
             )
         )

@@ -82,6 +82,97 @@ def vertices(name: str, depth: int = 0) -> np.ndarray:
     return result
 
 
+_poly_cache: dict[str, list] = {}
+
+
+def polygons(name: str, depth: int = 0) -> list:
+    """Every surface polygon of a part, in its own coordinates.
+
+    `vertices` throws the face structure away, which is fine for a bounding box
+    and useless for asking which side of a part is a wall: a point cloud cannot
+    tell a solid 4 x 3 slab from the four ribs around a hole. Same traversal,
+    same transforms, polygons kept whole.
+    """
+    key = name.lower()
+    if key in _poly_cache:
+        return _poly_cache[key]
+    if depth > 12:
+        return []
+    path = _find(name)
+    if not path:
+        return []
+    _poly_cache[key] = []  # placeholder, breaks self-reference
+
+    out: list = []
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            f = line.split()
+            if not f:
+                continue
+            if f[0] == "1" and len(f) >= 15:
+                try:
+                    nums = [float(v) for v in f[2:14]]
+                except ValueError:
+                    continue
+                t = np.array(nums[0:3])
+                m = np.array(nums[3:12]).reshape(3, 3)
+                out.extend(sub @ m.T + t for sub in polygons(f[14], depth + 1))
+            elif f[0] in ("3", "4"):
+                n = 3 if f[0] == "3" else 4
+                try:
+                    pts = [float(v) for v in f[2 : 2 + 3 * n]]
+                except ValueError:
+                    continue
+                out.append(np.array(pts).reshape(n, 3))
+
+    _poly_cache[key] = out
+    return out
+
+
+def _area(poly: np.ndarray) -> float:
+    """Area of a planar polygon, by the fan of triangles from its first vertex."""
+    total = 0.0
+    for i in range(1, len(poly) - 1):
+        total += float(np.linalg.norm(np.cross(poly[i] - poly[0], poly[i + 1] - poly[0]))) / 2
+    return total
+
+
+# A part has a front when one side carries this many times more flat surface than
+# the other. Two is loose enough to catch every panel measured and tight enough
+# that an ordinary brick, whose two faces are identical, reports nothing.
+FRONT_RATIO = 2.0
+
+
+def wall_side(name: str) -> str | None:
+    """Which way a part's one large flat face points, along Z. None if symmetric.
+
+    This decides which way round a panel goes into a wall, and it cannot be
+    inferred from the name or the bounding box: measured across the library,
+    every panel but one has its wall at +Z, and Panel 1 x 6 x 5 — the largest
+    and most visible of them — has it at -Z. Assume a convention and that part
+    goes in backwards, showing its ribs to the camera, in silence.
+    """
+    polys = polygons(name)
+    if not polys:
+        return None
+    zs = np.concatenate([p[:, 2] for p in polys])
+    lo, hi = float(zs.min()), float(zs.max())
+    if hi - lo < 1e-6:
+        return None
+    flat = {lo: 0.0, hi: 0.0}
+    for poly in polys:
+        z0, z1 = poly[:, 2].min(), poly[:, 2].max()
+        if z1 - z0 > 0.5:
+            continue  # not perpendicular to Z
+        for end in (lo, hi):
+            if abs(z0 - end) < 0.5:
+                flat[end] += _area(poly)
+    a_lo, a_hi = flat[lo], flat[hi]
+    if max(a_lo, a_hi) < 1e-6 or max(a_lo, a_hi) < FRONT_RATIO * min(a_lo, a_hi):
+        return None
+    return "-z" if a_lo > a_hi else "+z"
+
+
 # Anything under this is a chamfer, a groove or a rounded edge, not a shape.
 # A "Tile 1 x 4 with Groove" reads as a 4 LDU step if you go any lower, and the
 # whole tile table comes back classified as slopes.
@@ -216,6 +307,9 @@ def measure(part_num: str) -> dict | None:
         "zMinLDU": round(float(v[:, 2].min()), 1),
         "zMaxLDU": round(float(v[:, 2].max()), 1),
         "hasStuds": studs,
+        # Which way the part's one large flat face points, for parts that have
+        # one. A panel goes into a wall the way this says and no other way.
+        "wallSide": wall_side(f"{part_num}.dat"),
         # The number that decides a slope's rotation, read off the vertices rather
         # than recalled: which way the top surface descends, and by how much.
         "slopeAxis": axis if sloped else None,
