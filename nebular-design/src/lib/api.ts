@@ -5,6 +5,28 @@ function getToken(): string | null {
   return localStorage.getItem('nebular_token');
 }
 
+/** Endpoints where a 401 is the answer, not a stale session. */
+const AUTH_PATHS = ['/api/auth/login', '/api/auth/register'];
+
+/**
+ * A token lasts seven days and nothing renews it, so every session ends in a
+ * 401 eventually. That used to surface as the backend's own words in a red bar
+ * on whatever page you were on — "Invalid or expired token", over a photo that
+ * was ready to go, with no way to tell that signing in again would fix it.
+ *
+ * Signing out here rather than at each call site because there is no auth
+ * context to put it in: the token is read straight from localStorage in eight
+ * places, and every one of them would have to remember to do this.
+ */
+function sessionExpired(path: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (AUTH_PATHS.some((p) => path.startsWith(p))) return false;
+  localStorage.removeItem('nebular_token');
+  localStorage.removeItem('nebular_user');
+  window.location.href = '/login?expired=1';
+  return true;
+}
+
 async function request<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -21,6 +43,11 @@ async function request<T = unknown>(
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
   if (!res.ok) {
+    if (res.status === 401 && sessionExpired(path)) {
+      // The redirect is already under way; this only stops the caller from
+      // painting an error over a page that is about to be replaced.
+      throw new Error('Your session has expired. Please sign in again.');
+    }
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
@@ -37,6 +64,9 @@ async function requestText(path: string): Promise<string> {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {
+    if (res.status === 401 && sessionExpired(path)) {
+      throw new Error('Your session has expired. Please sign in again.');
+    }
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }

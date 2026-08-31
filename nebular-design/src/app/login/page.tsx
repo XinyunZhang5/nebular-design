@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { BrickStack, G } from '@/components/Bricks';
@@ -13,10 +13,19 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [expired, setExpired] = useState(false);
+
+  // Read off `window` rather than through useSearchParams, which would opt this
+  // page out of being prerendered — or need a Suspense boundary around it — for
+  // one optional flag.
+  useEffect(() => {
+    setExpired(new URLSearchParams(window.location.search).has('expired'));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setExpired(false);
     setLoading(true);
     try {
       const data = await api.auth.login(form);
@@ -46,6 +55,14 @@ export default function LoginPage() {
             </h1>
             <p className="text-lego-dark-gray font-medium mt-2">Log in to keep building.</p>
           </div>
+
+          {expired && !error && (
+            <div className="mb-6 flex items-center gap-2.5 px-4 py-3 rounded-2xl font-semibold text-sm"
+              style={{ background: 'rgba(247,209,23,0.18)', color: '#7A5C00' }}>
+              <CircleAlert size={16} strokeWidth={2.2} className="flex-shrink-0" />
+              Your session expired. Log in again to pick up where you left off.
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 flex items-center gap-2.5 px-4 py-3 rounded-2xl font-semibold text-sm"
