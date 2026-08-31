@@ -3,7 +3,6 @@
 import asyncio
 import base64
 import io
-import json
 import logging
 from typing import Any
 
@@ -71,6 +70,55 @@ def _prepare_for_claude(image_bytes: bytes, media_type: str) -> tuple[bytes, str
     )
     return data, "image/jpeg"
 
+# The shape of the answer, declared to the API instead of described in the
+# prompt and parsed out of prose afterwards.
+#
+# The prompt used to end with "Return ONLY a JSON object" and the reply was read
+# by finding the first { and the last } and calling json.loads on what lay
+# between. That works until the model writes a building's name with a quotation
+# mark in it, or an apostrophe the encoder handles differently, and then it does
+# not work at all:
+#
+#     Claude description failed: Expecting ',' delimiter: line 16 column 71
+#
+# There is no error surfaced from that — describe_build returns {} and the build
+# is stored as "Untitled Structure" with no description, looking for all the
+# world like a model that had nothing to say. Declaring the schema makes the
+# response a validated object, so this failure cannot happen.
+DESCRIBE_TOOL: dict[str, Any] = {
+    "name": "record_description",
+    "description": "Record the name, description and band titles for a finished LEGO model.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "buildingName": {
+                "type": "string",
+                "description": "The building's name if recognised, otherwise a descriptive name.",
+            },
+            "description": {
+                "type": "string",
+                "description": (
+                    "Two or three sentences on what the building is and what makes it "
+                    "distinctive as a three-dimensional model."
+                ),
+            },
+            "levelNotes": {
+                "type": "array",
+                "description": "One entry per band of courses, numbered 1 upward from the ground.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "level": {"type": "integer"},
+                        "title": {"type": "string", "description": "A short phrase for this band."},
+                    },
+                    "required": ["level", "title"],
+                },
+            },
+        },
+        "required": ["buildingName", "description", "levelNotes"],
+    },
+}
+
 SYSTEM_PROMPT = """You are an architecture writer for a LEGO design tool.
 
 A build plan has ALREADY been computed from the photograph by a geometry
@@ -85,7 +133,8 @@ Rules:
 - If you recognise the specific building, name it. If you do not, describe it by
   type and style instead of guessing a landmark.
 - Write plainly. No marketing voice, no exclamation marks.
-- Return ONLY a JSON object. No markdown fences, no text around it."""
+
+Answer by calling the record_description tool."""
 
 USER_PROMPT_TEMPLATE = """Here is the photograph a LEGO model was generated from.
 
@@ -107,15 +156,6 @@ Facts about the model (already computed — do not restate the numbers):
 - {building_cells} of {cells} cells are building; the rest is open air
 - {visible} bricks make up the facade, over {hidden} that form the structure behind it
 - Palette actually used: {palette}
-
-Return this JSON — these three fields and nothing else:
-{{
-  "buildingName": "the building's name if you recognise it, else a descriptive name",
-  "description": "2-3 sentences on what the building is and what makes it distinctive as a three-dimensional model",
-  "levelNotes": [
-    {{"level": 1, "title": "short phrase for this band of courses"}}
-  ]
-}}
 
 The model is built bottom-up in {bands} bands of courses. Give exactly {bands}
 entries in levelNotes, numbered 1 upward: band 1 is the ground, band {bands} the
@@ -175,12 +215,15 @@ async def describe_build(
             lambda: client.messages.create(
                 model=settings.claude_model,
                 # A name, a paragraph and eight headings measured 772 tokens, so
-                # 800 was one long description away from a truncated response —
-                # and a truncated response is unparseable JSON, i.e. no prose at
-                # all. Tall buildings get more bands, so leave real headroom; the
-                # cap costs nothing unless it is reached.
+                # 800 was one long description away from being truncated. Tall
+                # buildings get more bands, so leave real headroom; the cap costs
+                # nothing unless it is reached.
                 max_tokens=1200,
                 system=SYSTEM_PROMPT,
+                tools=[DESCRIBE_TOOL],
+                # Forced, so the reply is the object and never a sentence about
+                # the object.
+                tool_choice={"type": "tool", "name": DESCRIBE_TOOL["name"]},
                 messages=[{
                     "role": "user",
                     "content": [
@@ -192,16 +235,20 @@ async def describe_build(
             )
         )
         # Not content[0]: a response can open with a thinking block, and reading
-        # .text off one raises. That failure looked exactly like a model that had
-        # nothing to say — the build came back named "Untitled Structure" with no
-        # error surfaced anywhere the user could see.
-        raw = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
+        # the tool call off the wrong block raises. That failure looked exactly
+        # like a model that had nothing to say — the build came back named
+        # "Untitled Structure" with no error surfaced anywhere the user could see.
+        data = next(
+            (
+                block.input
+                for block in response.content
+                if getattr(block, "type", None) == "tool_use"
+                and block.name == DESCRIBE_TOOL["name"]
+            ),
+            None,
         )
-        start, end = raw.find("{"), raw.rfind("}") + 1
-        if start == -1 or end == 0:
-            raise ValueError("No JSON object in Claude response")
-        data = json.loads(raw[start:end])
+        if data is None:
+            raise ValueError("Claude did not call the description tool")
     except Exception as exc:
         logger.exception("Claude description failed: %s", exc)
         return {}

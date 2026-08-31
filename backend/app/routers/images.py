@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 
@@ -89,6 +90,27 @@ def _png_bytes(image: Image.Image, backdrop=(24, 25, 30)) -> bytes:
     return buf.getvalue()
 
 
+# Longest we will hold a finished plan back waiting for prose. The description is
+# the one step that depends on a third party, and a plan with no name is a far
+# better outcome than a request that never returns — the build page renders
+# "Untitled Structure" and everything else about the model is intact.
+DESCRIPTION_TIMEOUT = 25.0
+
+
+async def _describe_within_budget(
+    file_bytes: bytes, content_type: str, plan: dict
+) -> dict:
+    """describe_build, but it cannot hold the request open indefinitely."""
+    try:
+        return await asyncio.wait_for(
+            describe_build(file_bytes, content_type, plan), DESCRIPTION_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Description timed out after %.0fs; shipping the plan without it.",
+                       DESCRIPTION_TIMEOUT)
+        return {}
+
+
 @router.post("/upload", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def upload_and_analyze(
     image: UploadFile = File(...),
@@ -169,6 +191,20 @@ async def upload_and_analyze(
         cells = grids["cells"]
 
     grid_w = plan["grid"]["width"]
+
+    # Claude starts here and is collected at the end. It is the longest single
+    # step in the request — nine or ten seconds against about three for
+    # everything else put together — and it needs nothing that the rendering and
+    # the three object-storage writes below produce. Run in sequence it was most
+    # of the wait; run alongside them it costs what it costs minus what they do.
+    #
+    # It reads the plan's grid, palette and step count, and the code below only
+    # adds keys to the plan, so there is nothing here for the two to disagree
+    # about.
+    prose_task = asyncio.create_task(
+        _describe_within_budget(file_bytes, content_type, plan)
+    )
+
     model = to_ldraw(
         cells, grid_w, plan["grid"]["courses"], plan["grid"]["depth"],
         name=f"Nebular build — {image.filename or 'upload'}",
@@ -211,10 +247,11 @@ async def upload_and_analyze(
     except Exception:
         logger.exception("Could not store the renders; continuing without them.")
 
-    # 5. Claude names and describes what was built. It sees the original photo, not
-    #    the mask — recognising a landmark needs the whole frame. Nothing it returns
-    #    is allowed to alter a part, a quantity or a coordinate.
-    prose = await describe_build(file_bytes, content_type, plan)
+    # 5. Claude named and described what was built while the renders were being
+    #    stored. It sees the original photo, not the mask — recognising a
+    #    landmark needs the whole frame. Nothing it returns is allowed to alter a
+    #    part, a quantity or a coordinate.
+    prose = await prose_task
     if prose:
         plan["buildingName"] = prose.get("buildingName") or "Untitled Structure"
         if "description" in prose:
