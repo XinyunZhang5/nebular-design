@@ -114,7 +114,7 @@ export default function ChatPage() {
       await api.friends.request(targetUsername);
       setAddStatus(prev => ({ ...prev, [targetUsername]: 'sent' }));
     } catch (err) {
-      setAddStatus(prev => ({ ...prev, [targetUsername]: `err:${err instanceof Error ? err.message : '失败'}` }));
+      setAddStatus(prev => ({ ...prev, [targetUsername]: `err:${err instanceof Error ? err.message : 'Failed'}` }));
     }
   };
 

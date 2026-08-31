@@ -72,7 +72,7 @@ export default function UploadPage() {
   const handleAnalyze = async () => {
     if (!file) return;
     const token = localStorage.getItem('nebular_token');
-    if (!token) { setError('请先登录再上传'); return; }
+    if (!token) { setError('Log in before uploading'); return; }
 
     setStep(1); setError('');
 
@@ -103,7 +103,7 @@ export default function UploadPage() {
       setTimeout(() => setStep(2), 400);
     } catch (err) {
       clearInterval(interval);
-      setError(err instanceof Error ? err.message : '分析失败，请重试');
+      setError(err instanceof Error ? err.message : 'Analysis failed — please try again');
       setStep(0); setProgress(0);
     }
   };

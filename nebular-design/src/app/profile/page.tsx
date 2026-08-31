@@ -64,12 +64,12 @@ export default function ProfilePage() {
     setAddStatus('');
     try {
       await api.friends.request(addTarget.trim());
-      setAddStatus('ok:好友请求已发送！');
+      setAddStatus('ok:Friend request sent');
       setAddTarget('');
       const f = await api.friends.list();
       setFriendships(f);
     } catch (err) {
-      setAddStatus(`err:${err instanceof Error ? err.message : '发送失败'}`);
+      setAddStatus(`err:${err instanceof Error ? err.message : 'Could not send request'}`);
     }
   };
 
@@ -159,7 +159,7 @@ export default function ProfilePage() {
                 className="w-28 h-auto mx-auto mb-6 brick-shadow"
               />
               <h3 className="font-extrabold text-xl text-lego-black mb-2">No builds yet</h3>
-              <p className="text-lego-dark-gray font-medium mb-7">上传你的第一张建筑照片，开始搭建吧。</p>
+              <p className="text-lego-dark-gray font-medium mb-7">Upload your first building photo to start a build.</p>
               <Link href="/upload" className="btn-pill btn-pill-sm mx-auto w-fit">
                 <Plus size={16} strokeWidth={2.6} /> Start a build
               </Link>
@@ -210,7 +210,7 @@ export default function ProfilePage() {
               <div className="flex gap-3">
                 <input type="text" value={addTarget} onChange={e => setAddTarget(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && sendRequest()}
-                  placeholder="输入用户名…" className="input-soft flex-1" />
+                  placeholder="Enter a username…" className="input-soft flex-1" />
                 <button onClick={sendRequest} className="btn-pill btn-pill-sm flex-shrink-0">
                   <Send size={15} strokeWidth={2.4} /> Send
                 </button>
@@ -236,7 +236,7 @@ export default function ProfilePage() {
                       <BrickAvatar avatar={f.friend.avatar} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
-                        <p className="text-xs text-lego-dark-gray font-medium">想加你为好友</p>
+                        <p className="text-xs text-lego-dark-gray font-medium">wants to be your friend</p>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => accept(f.id)} className="btn-pill" style={{ padding: '8px 16px', fontSize: 13 }}>
@@ -299,7 +299,7 @@ export default function ProfilePage() {
                       <BrickAvatar avatar={f.friend.avatar} />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-lego-black truncate">{f.friend.username}</p>
-                        <p className="text-xs text-lego-gray font-medium">等待对方接受…</p>
+                        <p className="text-xs text-lego-gray font-medium">Waiting for them to accept…</p>
                       </div>
                       <button onClick={() => remove(f.id)} className="btn-pill-outline" style={{ padding: '7px 15px', fontSize: 13 }}>
                         Cancel
@@ -319,7 +319,7 @@ export default function ProfilePage() {
                   className="w-24 h-auto mx-auto mb-5 brick-shadow"
                 />
                 <h3 className="font-extrabold text-xl text-lego-black mb-2">No friends yet</h3>
-                <p className="text-lego-dark-gray font-medium">去 Community 聊天室认识积木爱好者。</p>
+                <p className="text-lego-dark-gray font-medium">Head to the Community chat room to meet fellow builders.</p>
               </div>
             )}
           </div>

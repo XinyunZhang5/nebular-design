@@ -101,7 +101,7 @@ function DMContent() {
               className="w-24 h-auto mx-auto mb-5 brick-shadow"
             />
             <p className="font-extrabold text-lego-black mb-1">No messages yet</p>
-            <p className="text-lego-dark-gray font-medium text-sm">发送第一条消息，开始聊天。</p>
+            <p className="text-lego-dark-gray font-medium text-sm">Send the first message to start the conversation.</p>
           </div>
         )}
         {messages.map(msg => {
@@ -134,7 +134,7 @@ function DMContent() {
       <div className="border-t hairline bg-white/70 backdrop-blur-sm px-4 sm:px-6 py-4">
         <form onSubmit={send} className="flex gap-3 max-w-3xl mx-auto">
           <input type="text" value={input} onChange={e => setInput(e.target.value)}
-            placeholder={`给 ${toName} 发消息…`} className="input-soft flex-1" maxLength={500} />
+            placeholder={`Message ${toName}…`} className="input-soft flex-1" maxLength={500} />
           <button type="submit" disabled={!input.trim() || !connected}
             className="btn-pill btn-pill-sm flex-shrink-0 disabled:opacity-40 disabled:pointer-events-none"
             aria-label="Send message">
