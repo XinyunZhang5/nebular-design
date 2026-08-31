@@ -168,8 +168,9 @@ def to_ldraw(
             z = (depth - c.z - bd / 2) * STUD_LDU
         # Every part's origin is the centre of its top face. The floor's top is the
         # ground course's underside, so it sits at 0; course n's top is n+1 courses
-        # above that, and -Y is up.
-        y = 0.0 if c.y == FLOOR else -BRICK_LDU * (c.y + 1)
+        # above that, and -Y is up. A part spanning several courses has its top
+        # that many courses up, not one.
+        y = 0.0 if c.y == FLOOR else -BRICK_LDU * (c.y + getattr(c, "courses", 1))
         # A cap rests on that course rather than replacing it, so its own top face
         # is one part-height further up. Reading the height off the part instead of
         # assuming a tile keeps this correct if a cap is ever something else.

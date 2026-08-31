@@ -130,6 +130,11 @@ class Cell(NamedTuple):
     # symmetric: "y90" or "y270". Only slopes need it so far — they are cut to
     # descend along their own Z, and a roofline descends along the facade's X.
     rot: str | None = None
+    # How many courses the part occupies, upward from y. One for everything that
+    # is laid course by course; a panel is the exception — Panel 1 x 6 x 5 is a
+    # single part standing five courses tall, and a writer that assumes one
+    # course seats it four courses into the floor.
+    courses: int = 1
 
 
 def _floor(width: int, depth: int, columns: np.ndarray | None = None) -> list[Cell]:

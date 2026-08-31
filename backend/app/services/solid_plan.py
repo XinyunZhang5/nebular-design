@@ -50,6 +50,7 @@ from app.services.legolize import (
     _tally,
 )
 from app.services import lego_shapes as shapes
+from app.services import massing
 from app.services.voxel import COURSE_PER_STUD, Solid
 
 logger = logging.getLogger(__name__)
@@ -81,16 +82,19 @@ def _hollow(filled: np.ndarray, shell: int) -> np.ndarray:
 def _repair_support(filled: np.ndarray, original: np.ndarray) -> np.ndarray:
     """Put back interior wherever hollowing left a whole run standing on air.
 
-    Deliberately at the level of a connected group within a course, not a single
-    cell. Cell by cell was the second attempt and it refills the entire model:
-    the inner cell of a tapered ring sits over the hollow, so it demands a cell
-    beneath, which demands another, all the way to the ground — every taper
-    grows a solid column and hollowing buys nothing.
+    Not cell by cell: that was the second attempt and it refills the entire
+    model, because the inner cell of a tapered ring sits over the hollow and
+    demands a cell beneath, which demands another, all the way to the ground.
+    Every taper grows a solid column and hollowing buys nothing.
 
-    The looser rule is the physically true one, because a course is laid in
-    bricks and a brick spanning several cells only needs one of them held. That
-    is `_partition_anchored`'s job. This pass exists for what that cannot save:
-    a run with no anchor anywhere along it, which no brick can reach.
+    By connected group, which is the physically true rule for this pass: a course
+    is laid in bricks and a brick spanning several cells only needs one of them
+    held, which is `_partition_anchored`'s job. What this pass exists for is a
+    run with no anchor anywhere along it, which no brick can reach.
+
+    The reach that a *single* brick has is a different question, and `_underpin`
+    answers it — separately, because the two need different sources of material.
+    This one may only restore what hollowing took away.
 
     Runs to a fixed point — a restored cell needs support of its own.
     """
@@ -124,15 +128,92 @@ def _repair_support(filled: np.ndarray, original: np.ndarray) -> np.ndarray:
     return out
 
 
+# How far a brick can carry a cell out over open air. A cell this many studs
+# from the nearest supported one is still reachable by some brick in the table
+# that also covers an anchor; beyond it, nothing in the catalogue spans the gap.
+# Three is deliberately short of the longest brick — a Brick 1 x 8 could reach
+# seven, but only if the whole run is one colour, and betting the wall on that
+# is how the overhang silently disappears instead.
+SUPPORT_REACH = 3
+
+
+def _underpin(filled: np.ndarray) -> np.ndarray:
+    """Add a footing under anything too far out over air for a brick to reach.
+
+    Regularising gives each mass of the building one footprint, and where two
+    masses meet, the upper one can step outward — a cornice, a clock stage wider
+    than its shaft. That is real architecture and the model should keep it, but
+    the bottom course of the wider mass then has cells with nothing under them.
+
+    `_repair_support` does not see this, and correctly: it asks whether a
+    connected run within a course is held *anywhere*, and the overhanging part
+    of a ring is connected to the part that sits on the shaft, so the run is
+    held and the pass moves on. What it cannot see is that being held at the far
+    end of a twenty-stud ring is no use to a cell at this end, because no brick
+    is twenty studs long. The rule that matters is distance, not connectivity.
+
+    Left undone this is not a cosmetic loss. Measured on Big Ben: 397 cells that
+    genuinely could not be placed, cascading to 2402 as each dropped cell took
+    the one above it, and the finished model lost its spire and the front wall
+    of its tower.
+    """
+    # Top down, so one pass carries a footing all the way to the ground. Going
+    # bottom up propagates it one course per sweep, which for a sixty-four course
+    # tower needs sixty-four sweeps and gave up after twelve, having built
+    # stumps that stopped in mid-air.
+    out = filled.copy()
+    for _ in range(MAX_SUPPORT_SWEEPS):
+        added = 0
+        for y in range(len(out) - 1, 0, -1):
+            if not out[y].any():
+                continue
+            near = out[y] & out[y - 1]
+            if not near.any():
+                # Nothing under this course at all: the whole of it is a footing.
+                put = out[y] & ~out[y - 1]
+            else:
+                for _step in range(SUPPORT_REACH):
+                    near = massing._dilate2(near) & out[y]
+                put = out[y] & ~near & ~out[y - 1]
+            if not put.any():
+                continue
+            out[y - 1] |= put
+            added += int(put.sum())
+        if not added:
+            logger.info("solid_plan: footings settled, %d cells", int(out.sum() - filled.sum()))
+            return out
+    logger.warning("solid_plan: footings did not settle in %d sweeps", MAX_SUPPORT_SWEEPS)
+    return out
+
+
 def _visible(filled: np.ndarray) -> np.ndarray:
-    """Cells with at least one face open to the air."""
+    """Cells with a face onto air that reaches the outside world.
+
+    Not "has an open face". Hollowing the model puts a cavity inside it, and the
+    inner surface of the shell has open faces onto that cavity — open, enclosed,
+    and seen by nobody. Counting those as visible is not a cosmetic mistake:
+    those cells were interior when the mesh was sampled, so they have no colour
+    at all, and they arrive at the palette as pure black. Measured on Big Ben,
+    they were 1988 cells and 26% of the piece count, which is why a honey-
+    coloured limestone tower was coming out a quarter black.
+
+    Flood the empty space from outside the lattice and ask which cells touch
+    *that*. Same technique the voxeliser uses to decide what is interior, and it
+    has to be, or the two disagree about what the inside of the model is.
+    """
+    from scipy import ndimage
+
     padded = np.pad(filled, 1, constant_values=False)
+    seed = np.zeros_like(padded)
+    seed[0, 0, 0] = True
+    air = ndimage.binary_propagation(seed, mask=~padded)
+
     exposed = np.zeros_like(filled)
     for axis in range(3):
         for shift in (-1, 1):
             sl = [slice(1, -1)] * 3
             sl[axis] = slice(1 + shift, (-1 + shift) or None)
-            exposed |= ~padded[tuple(sl)]
+            exposed |= air[tuple(sl)]
     return exposed & filled
 
 
@@ -337,6 +418,130 @@ def _roofline(
     return out, reserved
 
 
+# The four vertical faces of the model, as (axis, step) of the neighbour whose
+# absence exposes the face, and the turn a panel needs to show its wall outward.
+#
+# The turn depends on the part, not only on the face: a panel's finished side is
+# +z for most of the library and -z for Panel 1 x 6 x 5, so both columns are
+# carried and the one that applies is chosen per part. Model z runs into the
+# model and LDraw's runs out of it, which is where the apparent half-turn between
+# the front face and "no rotation at all" comes from.
+_FACES: tuple[tuple[int, int, str, str], ...] = (
+    (1, -1, "y0", "y180"),    # front  (model -z)  -> wall must point LDraw +Z
+    (1, 1, "y180", "y0"),     # back   (model +z)  -> LDraw -Z
+    (2, -1, "y90", "y270"),   # left   (model -x)  -> LDraw -X
+    (2, 1, "y270", "y90"),    # right  (model +x)  -> LDraw +X
+)
+
+
+# A panel has to earn its place. Swapping a Brick 1 x 2 for a Panel 1 x 2 x 1 is
+# one part for one part: no saving, one more line on the shopping list, and one
+# less stud of grip. Only panels that span courses can beat the bricking, and
+# only if they span enough of them — six cells is two courses of three, which is
+# the smallest trade that removes more parts than it adds.
+MIN_PANEL_CELLS = 6
+
+
+def _exposed(filled: np.ndarray, axis: int, step: int) -> np.ndarray:
+    """Cells with nothing next to them in one direction."""
+    return filled & ~massing._shifted(filled, axis, step)
+
+
+def _panelling(
+    filled: np.ndarray,
+    visible: np.ndarray,
+    colours: np.ndarray,
+    taken: np.ndarray,
+) -> tuple[list[Cell], np.ndarray]:
+    """Face the flat walls with panels, and say which cells they took over.
+
+    WHY A SEPARATE PASS
+
+    Everything else here works one course at a time, because that is how a wall
+    is laid. It is also why the piece count stopped falling: straightening the
+    walls lengthened the runs of constant colour *upward* — measured on Big Ben,
+    a mean of 1.98 courses and a longest of 41 — and a course-by-course
+    partitioner cannot spend a single one of them. A panel is the part that can.
+    Panel 1 x 6 x 5 covers thirty cells that would otherwise be thirty bricks in
+    five separate courses.
+
+    So this runs over the four vertical faces, slicing each along its own normal
+    so that a slice is one plane of wall, and greedily lays the largest panel
+    that fits a rectangle of one colour. The cells it claims are returned as a
+    reservation for `_build_courses` to skip, exactly as the roofline does.
+
+    A panel hangs on the studs of the course beneath it, so the only structural
+    requirement is that something is there to hang on.
+    """
+    reserved = np.zeros_like(filled)
+    cells: list[Cell] = []
+    courses = len(filled)
+
+    for axis, step, turn_pos, turn_neg in _FACES:
+        face = filled & visible & _exposed(filled, axis, step) & ~taken
+        if not face.any():
+            continue
+        for k in range(filled.shape[axis]):
+            plane = (slice(None), k, slice(None)) if axis == 1 else (slice(None), slice(None), k)
+            mask, colour = face[plane], colours[plane]
+            if not mask.any():
+                continue
+            done = np.zeros_like(mask)
+            for panel in cat.PANEL_WALLS:
+                if panel.courses < 2 or panel.area < MIN_PANEL_CELLS:
+                    continue
+                turn = turn_pos if panel.wall_side == "+z" else turn_neg
+                for y in range(courses - panel.courses + 1):
+                    for a in range(mask.shape[1] - panel.width + 1):
+                        win = (slice(y, y + panel.courses), slice(a, a + panel.width))
+                        if not mask[win].all() or done[win].any():
+                            continue
+                        if len(np.unique(colour[win])) != 1:
+                            continue
+                        run = (
+                            (k, slice(a, a + panel.width)) if axis == 1
+                            else (slice(a, a + panel.width), k)
+                        )
+                        # Nothing to clip onto: a panel is not a cantilever, and
+                        # the whole of its base has to be held, not merely some
+                        # of it — a panel resting on one stud of six is what put
+                        # forty-eight loose parts in the model the first time.
+                        if y > 0 and not filled[y - 1][run].all():
+                            continue
+                        # A panel is a facing, not the wall itself. Laid over
+                        # nothing it becomes the structure — a one-stud skin with
+                        # the building hollow behind it — so it is only allowed
+                        # where there is a course of brick to face.
+                        behind = massing._shifted(filled, axis, -step)
+                        if not behind[plane][win].all():
+                            continue
+                        done[win] = True
+                        # Width runs along the wall; the panel is one stud thick.
+                        bw, bl = (panel.width, 1) if axis == 1 else (1, panel.width)
+                        x, z = (a, k) if axis == 1 else (k, a)
+                        cells.append(
+                            Cell(
+                                x, y, z,
+                                cat.Plate(
+                                    panel.part_num, panel.name, bw, bl,
+                                    panel.courses * cat.BRICK_LDU,
+                                ),
+                                int(colour[y, a]),
+                                hidden=False,
+                                rot=turn,
+                                courses=panel.courses,
+                            )
+                        )
+            reserved[plane] |= done
+
+    if cells:
+        logger.info(
+            "solid_plan: %d panel(s) faced %d cell(s) of wall",
+            len(cells), int(reserved.sum()),
+        )
+    return cells, reserved
+
+
 def _partition_anchored(
     mask: np.ndarray, anchored: np.ndarray, catalogue
 ) -> tuple[list[tuple[int, int, Any]], np.ndarray]:
@@ -478,23 +683,100 @@ def _build_courses(
     return cells, dropped_total
 
 
+# Rounds of "probe the build, put a footing under whatever fell". Converges in
+# two or three; the cap is only there so a pathological solid cannot spin.
+BUILD_SETTLE_ROUNDS = 6
+
+
+def _make_buildable(
+    filled: np.ndarray, visible: np.ndarray, colours: np.ndarray
+) -> np.ndarray:
+    """Add structure until the model can actually be laid, instead of deleting it.
+
+    `_build_courses` walks bottom-up and throws away whatever it cannot anchor,
+    which is honest but compounds: a cell dropped at course 3 takes the cell
+    above it at course 4, and that one takes course 5, all the way up. Measured
+    on Big Ben: 346 cells were genuinely unbuildable and 2244 were lost — a 6.5x
+    amplification, 899 of them outer skin. That is what put the light grey of the
+    interior fill down the front of the tower, because dropping the skin exposes
+    what was behind it.
+
+    A dropped cell is a cell with nothing under it. The answer a builder gives is
+    not to leave the wall out, it is to put a brick underneath — so that is what
+    this does, then probes again, until nothing falls. A genuine overhang grows a
+    real column, which is not a workaround: a LEGO model cannot have a floating
+    brick either.
+
+    It is bounded by `SUPPORT_REACH` doing its job first. Only cells further than
+    a brick can reach from support ever get here, so a cornice three studs deep
+    costs nothing and only a real cantilever pays for itself.
+    """
+    out = filled.copy()
+    for _ in range(BUILD_SETTLE_ROUNDS):
+        probe_solid, probe_seen = out.copy(), visible & out
+        _build_courses(probe_solid, probe_seen, colours, None)
+        lost = out & ~probe_solid
+        if not lost.any():
+            break
+        footing = np.zeros_like(out)
+        footing[:-1] = lost[1:]
+        footing &= ~out
+        if not footing.any():
+            break
+        out |= footing
+        out = _underpin(out)
+    grown = int(out.sum() - filled.sum())
+    if grown:
+        logger.info("solid_plan: %d cell(s) of footing so the model can be laid", grown)
+    return out
+
+
 def plan_from_solid(
     solid: Solid,
     shell: int | None = DEFAULT_SHELL_CELLS,
     max_colours: int = DEFAULT_MAX_COLOURS,
+    regularise: bool = True,
+    panels: bool = True,
 ) -> dict[str, Any]:
     """Lattice solid -> the same plan shape `legolize.generate_plan` returns."""
     filled = solid.filled.copy()
+    rgb = solid.rgb
+
+    # Before anything else, because everything else reads the shape of the
+    # solid: give each mass of the building one flat footprint instead of the
+    # per-course wobble the reconstruction hands over. See massing.py — this is
+    # what puts long runs in the walls, and long runs are what large bricks need.
+    if regularise:
+        straight, spans = massing.regularise(filled)
+        if spans:
+            # Footings first, colours second, so the footings get a colour too.
+            straight = _underpin(straight)
+            rgb = massing.inpaint_colours(rgb, filled, straight)
+            filled = straight
+
     if shell:
-        filled = _repair_support(_hollow(filled, shell), filled)
+        filled = _underpin(_repair_support(_hollow(filled, shell), filled))
         logger.info(
             "solid_plan: hollowed %d cells to %d (shell %d)",
             solid.count, int(filled.sum()), shell,
         )
 
+    def paint(solid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        seen = _visible(solid)
+        lit = _face_forward(rgb, solid, seen)
+        if regularise:
+            lit = massing.neutralise_shading(lit, solid, seen)
+        ids = _quantise(lit, seen, max_colours)
+        if regularise:
+            ids = massing.flatten_colours(ids, solid, seen)
+        return seen, ids
+
+    # Painted once to probe with, then repainted, because making the model
+    # buildable changes its shape and the palette is chosen from the shape.
+    visible, colours = paint(filled)
+    filled = _make_buildable(filled, visible, colours)
+    visible, colours = paint(filled)
     courses, depth, width = filled.shape
-    visible = _visible(filled)
-    colours = _quantise(_face_forward(solid.rgb, filled, visible), visible, max_colours)
 
     # Bottom-up, so "supported" means supported by what is actually there after
     # the course below dropped its own floating cells — not by what the mesh
@@ -516,8 +798,17 @@ def plan_from_solid(
         "solid_plan: %d slope(s) over %d cell(s) of staircase",
         len(slopes), int(reserved.sum()),
     )
+    # Panels after slopes and before the real build, for the same reason the
+    # slopes come after the settle: each pass may only claim cells the pass
+    # before it left alone, and the ordinary bricking has to see every claim.
+    faced: list[Cell] = []
+    if panels:
+        faced, panelled = _panelling(filled, visible, colours, reserved)
+        reserved = reserved | panelled
+
     cells, again = _build_courses(filled, visible, colours, reserved)
     cells.extend(slopes)
+    cells.extend(faced)
     dropped_total += again
 
     floor = _floor(filled[0])

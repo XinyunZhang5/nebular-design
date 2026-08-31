@@ -11,6 +11,7 @@ draw on is measured rather than written — see lego_shapes.py and the generator
 that produces it, scripts/build_shape_library.py.
 """
 
+import re
 from typing import Any, NamedTuple
 
 from app.services import lego_shapes as shapes
@@ -101,6 +102,65 @@ TILES_BY_AREA = TILES
 #
 # Placement rules are still to be written; the parts and their geometry are ready.
 # ---------------------------------------------------------------------------
+
+class Panel(NamedTuple):
+    """A wall one stud thick, standing a whole number of courses tall.
+
+    The part that lets a facade stop being a stack of courses. A Panel 1 x 6 x 5
+    is one piece where the brick-by-brick partitioner needs thirty, and it is
+    what the walls of a real Architecture set are made of — the partitioner works
+    a course at a time and so can never spend the vertical coherence a flat wall
+    has, however flat it is.
+    """
+
+    part_num: str
+    name: str
+    width: int  # studs along the wall
+    courses: int  # courses tall
+    # Which way the finished face points in the part's own coordinates. Measured
+    # — see lego_shapes — because it is not the same for every panel.
+    wall_side: str
+
+    @property
+    def area(self) -> int:
+        return self.width * self.courses
+
+
+# Plain walls only. "Panel 1 x 4 x 5 with Arched Window" is a real part and a
+# good one, but it is a window: putting it in the table the wall-filler reaches
+# for would punch arched holes through a facade at random. Panels with openings
+# want to be chosen for a reason, which is a different pass than this one.
+#
+# "Corner" is singular on purpose. A "Panel 1 x 1 x 1 Corner" turns a corner and
+# does not belong here; "Panel 1 x 2 x 1 [Rounded Corners]" is a flat wall with
+# its edges softened, and matching the word loosely dropped it along with the
+# 1 x 4 x 1 — the two commonest thin walls in the library.
+_PATTERNED = re.compile(r"Window|Arch|Divider|Corrugated|\bCorner\b")
+
+
+def _panels() -> list[Panel]:
+    """Every plain full-course panel footprint, largest first."""
+    best: dict[tuple[int, int], Any] = {}
+    for shape in shapes.family("panel"):
+        courses = shape.height / BRICK_LDU
+        if shape.depth != 1 or abs(courses - round(courses)) > 0.01:
+            continue
+        if shape.wall_side is None or _PATTERNED.search(shape.name):
+            continue
+        key = (shape.width, int(round(courses)))
+        if key not in best or shape.sets > best[key].sets:
+            best[key] = shape
+    return sorted(
+        (
+            Panel(s.part_num, s.name, w, c, s.wall_side)
+            for (w, c), s in best.items()
+        ),
+        key=lambda p: -p.area,
+    )
+
+
+PANEL_WALLS = _panels()
+
 
 SLOPES = shapes.family("slope")
 SLOPES_INVERTED = shapes.family("slope_inverted")
