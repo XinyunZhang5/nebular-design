@@ -8,7 +8,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, mainented]
   pull_request:
   workflow_dispatch:
 
@@ -17,11 +17,12 @@ jobs:
     name: Catalogues and viewer library
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       # Not requirements.txt. The check imports the catalogue modules and
       # nothing below them, so it needs numpy, Pillow and pydantic-settings —
@@ -47,7 +48,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: nebular-design/package-lock.json
 
@@ -63,4 +64,4 @@ jobs:
       # continue-on-error once they are cleared.
       - name: Lint
         run: npx eslint .
-        continue-on-error: true
+        continue-on-error: false
